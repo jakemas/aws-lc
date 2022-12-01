@@ -96,6 +96,10 @@ int x509_digest_sign_algorithm(EVP_MD_CTX *ctx, X509_ALGOR *algor) {
     return X509_ALGOR_set0(algor, OBJ_nid2obj(NID_ED25519), V_ASN1_UNDEF, NULL);
   }
 
+  if (EVP_PKEY_id(pkey) == EVP_PKEY_DILITHIUM3) {
+    return X509_ALGOR_set0(algor, OBJ_nid2obj(NID_DILITHIUM3), V_ASN1_UNDEF, NULL);
+  }
+
   // Default behavior: look up the OID for the algorithm/hash pair and encode
   // that.
   const EVP_MD *digest = EVP_MD_CTX_md(ctx);
