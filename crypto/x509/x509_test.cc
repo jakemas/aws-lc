@@ -2108,6 +2108,32 @@ TEST(X509Test, DilithiumSign) {
   ASSERT_TRUE(SignatureRoundTrips(md_ctx.get(), pub.get()));
 }
 
+TEST(X509Test, DilithiumSignCert) {
+  //generate the dilithium key
+  EVP_PKEY_CTX *dilithium_pkey_ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_DILITHIUM3, nullptr);
+  ASSERT_NE(dilithium_pkey_ctx, nullptr);
+
+  EVP_PKEY *dilithium_pkey = EVP_PKEY_new();
+  ASSERT_NE(dilithium_pkey, nullptr);
+
+  EXPECT_TRUE(EVP_PKEY_keygen_init(dilithium_pkey_ctx));
+  EXPECT_TRUE(EVP_PKEY_keygen(dilithium_pkey_ctx, &dilithium_pkey));
+
+  //generate the cert
+  bssl::UniquePtr<X509> leaf =
+      MakeTestCert("Intermediate", "Leaf", dilithium_pkey, /*is_ca=*/false);
+  ASSERT_TRUE(leaf);
+
+  //sign the cert
+  bssl::ScopedEVP_MD_CTX md_ctx;
+  EVP_DigestSignInit(md_ctx.get(), nullptr, nullptr, nullptr, dilithium_pkey);
+  ASSERT_TRUE(X509_sign_ctx(leaf.get(), md_ctx.get()));
+
+  //this fails as:
+  // 140270008116280:error:0c000086:ASN.1 encoding routines:OPENSSL_internal:ILLEGAL_OBJECT:/Users/jakemas/x509-dec/aws-lc/crypto/asn1/tasn_enc.c:622:
+  // 140270008116280:error:0b000041:X.509 certificate routines:OPENSSL_internal:malloc failure:/Users/jakemas/x509-dec/aws-lc/crypto/x509/a_sign.c:110:
+}
+
 TEST(X509Test, Dilithium3Cert) {
   // print certs in console/to file for testing
   //generate the dilithium key
