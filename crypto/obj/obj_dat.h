@@ -7177,6 +7177,18 @@ static const uint8_t kObjectData[] = {
     0x04,
     0x02,
     0x0a,
+    /* NID_dilithium3 */
+    0x2B,
+    0x06,
+    0x01,
+    0x04,
+    0x01,
+    0x02,
+    0x82,
+    0x0B,
+    0x07,
+    0x06,
+    0x05,
 };
 
 static const ASN1_OBJECT kObjects[NUM_NID] = {
@@ -8831,7 +8843,7 @@ static const ASN1_OBJECT kObjects[NUM_NID] = {
     {"SHA3-512", "sha3-512", NID_sha3_512, 9, &kObjectData[6223], 0},
     {"HKDF", "hkdf", NID_hkdf, 0, NULL, 0},
     {"KYBER512", "KYBER512", NID_KYBER512, 0, NULL, 0},
-    {"DILITHIUM3", "DILITHIUM3", NID_DILITHIUM3, 0, NULL, 0},
+    {"DILITHIUM3", "DILITHIUM3", NID_DILITHIUM3, 11, &kObjectData[6232], 0},
 };
 
 static const uint16_t kNIDsInShortNameOrder[] = {

@@ -2128,10 +2128,6 @@ TEST(X509Test, DilithiumSignCert) {
   bssl::ScopedEVP_MD_CTX md_ctx;
   EVP_DigestSignInit(md_ctx.get(), nullptr, nullptr, nullptr, dilithium_pkey);
   ASSERT_TRUE(X509_sign_ctx(leaf.get(), md_ctx.get()));
-
-  //this fails as:
-  // 140270008116280:error:0c000086:ASN.1 encoding routines:OPENSSL_internal:ILLEGAL_OBJECT:/Users/jakemas/x509-dec/aws-lc/crypto/asn1/tasn_enc.c:622:
-  // 140270008116280:error:0b000041:X.509 certificate routines:OPENSSL_internal:malloc failure:/Users/jakemas/x509-dec/aws-lc/crypto/x509/a_sign.c:110:
 }
 
 TEST(X509Test, Dilithium3Cert) {
@@ -2155,20 +2151,9 @@ TEST(X509Test, Dilithium3Cert) {
   //sign the cert
   bssl::ScopedEVP_MD_CTX md_ctx;
   EVP_DigestSignInit(md_ctx.get(), nullptr, nullptr, nullptr, dilithium_pkey);
-
-  //this fails
-  //ASSERT_TRUE(X509_sign_ctx(leaf.get(), md_ctx.get()));
-  //bssl::UniquePtr<X509> copy = ReencodeCertificate(leaf.get());
-
-  //const DILITHIUM3_KEY *dilithium3Key = (DILITHIUM3_KEY *)(dilithium_pkey->pkey.ptr);
-  //EVP_PKEY *pub = EVP_PKEY_new_raw_public_key(EVP_PKEY_DILITHIUM3,
-  //                                                   NULL,
-  //                                                   dilithium3Key->pub,
-  //                                                   DILITHIUM3_PUBLIC_KEY_BYTES);
-  //ASSERT_TRUE(SignatureRoundTrips(md_ctx.get(), pub));
-  //bssl::UniquePtr<X509> copy = ReencodeCertificate(leaf.get());
-
-
+  ASSERT_TRUE(X509_sign_ctx(leaf.get(), md_ctx.get()));
+  bssl::UniquePtr<X509> copy = ReencodeCertificate(leaf.get());
+  
   // print the cert
   bssl::UniquePtr<BIO> bio(BIO_new(BIO_s_mem()));
   X509_print_ex(bio.get(), leaf.get(), 0, 0);
