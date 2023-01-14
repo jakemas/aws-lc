@@ -2048,18 +2048,6 @@ TEST(X509Test, DilithiumPrivKey) {
   ASSERT_TRUE(CBB_init(&cbb, 0));
   ASSERT_TRUE(EVP_marshal_private_key(&cbb, dilithium_pkey));
   ASSERT_TRUE(CBB_finish(&cbb, &der, &der_len));
-  //printf("%zu", der_len);
-
-  bssl::UniquePtr<BIO> bio(BIO_new(BIO_s_mem()));
-  char buf[PEM_BUFSIZE];
-  buf[0] = '\0';
-  ASSERT_TRUE(PEM_write_bio(bio.get(), PEM_STRING_PKCS8INF, buf, der, der_len));
-
-  //to file
-  FILE *fptr;
-  fptr = fopen("dilithiumpriv.txt","w");
-  ASSERT_TRUE(PEM_write(fptr, PEM_STRING_PKCS8INF, buf, der, der_len));
-  fclose(fptr);
 }
 
 TEST(X509Test, DilithiumPubKey) {
@@ -2075,47 +2063,14 @@ TEST(X509Test, DilithiumPubKey) {
   ASSERT_TRUE(CBB_init(&cbb, 0));
   ASSERT_TRUE(EVP_marshal_public_key(&cbb, dilithium_pkey));
   ASSERT_TRUE(CBB_finish(&cbb, &der, &der_len));
-  printf("%zu", der_len);
-
-  bssl::UniquePtr<BIO> bio(BIO_new(BIO_s_mem()));
-  char buf[PEM_BUFSIZE];
-  buf[0] = '\0';
-  ASSERT_TRUE(PEM_write_bio(bio.get(), PEM_STRING_PUBLIC, buf, der, der_len));
-
-  //to file
-  FILE *fptr;
-  fptr = fopen("dilithiumpublic.txt","w");
-  ASSERT_TRUE(PEM_write(fptr, PEM_STRING_PUBLIC, buf, der, der_len));
-  fclose(fptr);
 }
 
-TEST(X509Test, DilithiumSign) {
-  uint8_t pub_bytes[DILITHIUM3_PUBLIC_KEY_BYTES], priv_bytes[DILITHIUM3_PRIVATE_KEY_BYTES];
-  DILITHIUM3_keypair(pub_bytes, priv_bytes);
-
-  bssl::UniquePtr<EVP_PKEY> pub(
-      EVP_PKEY_new_raw_public_key(EVP_PKEY_DILITHIUM3, nullptr, pub_bytes, DILITHIUM3_PUBLIC_KEY_BYTES));
-  ASSERT_TRUE(pub);
-  bssl::UniquePtr<EVP_PKEY> priv(
-      EVP_PKEY_new_raw_private_key(EVP_PKEY_DILITHIUM3, nullptr, priv_bytes, DILITHIUM3_PRIVATE_KEY_BYTES));
-  ASSERT_TRUE(priv);
-
-
-
-  bssl::ScopedEVP_MD_CTX md_ctx;
-  ASSERT_TRUE(
-      EVP_DigestSignInit(md_ctx.get(), nullptr, nullptr, nullptr, priv.get()));
-  ASSERT_TRUE(SignatureRoundTrips(md_ctx.get(), pub.get()));
-}
-
-TEST(X509Test, DilithiumSignCert) {
+TEST(X509Test, DilithiumSignVerifyCert) {
   //generate the dilithium key
   EVP_PKEY_CTX *dilithium_pkey_ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_DILITHIUM3, nullptr);
   ASSERT_NE(dilithium_pkey_ctx, nullptr);
-
   EVP_PKEY *dilithium_pkey = EVP_PKEY_new();
   ASSERT_NE(dilithium_pkey, nullptr);
-
   EXPECT_TRUE(EVP_PKEY_keygen_init(dilithium_pkey_ctx));
   EXPECT_TRUE(EVP_PKEY_keygen(dilithium_pkey_ctx, &dilithium_pkey));
 
@@ -2128,11 +2083,15 @@ TEST(X509Test, DilithiumSignCert) {
   bssl::ScopedEVP_MD_CTX md_ctx;
   EVP_DigestSignInit(md_ctx.get(), nullptr, nullptr, nullptr, dilithium_pkey);
   ASSERT_TRUE(X509_sign_ctx(leaf.get(), md_ctx.get()));
+
+  //verify the cert
+  ASSERT_TRUE(X509_verify(leaf.get(), dilithium_pkey));
 }
 
 TEST(X509Test, Dilithium3Cert) {
   // print certs in console/to file for testing
   //generate the dilithium key
+  // will remove the print out before merging, this is for testing the PR
   EVP_PKEY_CTX *dilithium_pkey_ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_DILITHIUM3, nullptr);
   ASSERT_NE(dilithium_pkey_ctx, nullptr);
 
@@ -2153,7 +2112,7 @@ TEST(X509Test, Dilithium3Cert) {
   EVP_DigestSignInit(md_ctx.get(), nullptr, nullptr, nullptr, dilithium_pkey);
   ASSERT_TRUE(X509_sign_ctx(leaf.get(), md_ctx.get()));
   bssl::UniquePtr<X509> copy = ReencodeCertificate(leaf.get());
-  
+
   // print the cert
   bssl::UniquePtr<BIO> bio(BIO_new(BIO_s_mem()));
   X509_print_ex(bio.get(), leaf.get(), 0, 0);

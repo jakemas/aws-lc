@@ -156,7 +156,7 @@ int x509_digest_verify_init(EVP_MD_CTX *ctx, const X509_ALGOR *sigalg,
     if (sigalg_nid == NID_rsassaPss) {
       return x509_rsa_pss_to_ctx(ctx, sigalg, pkey);
     }
-    if (sigalg_nid == NID_ED25519) {
+    if (sigalg_nid == NID_ED25519 || sigalg_nid == NID_DILITHIUM3) {
       if (sigalg->parameter != NULL) {
         OPENSSL_PUT_ERROR(X509, X509_R_INVALID_PARAMETER);
         return 0;
