@@ -2048,6 +2048,9 @@ TEST(X509Test, DilithiumPrivKey) {
   ASSERT_TRUE(CBB_init(&cbb, 0));
   ASSERT_TRUE(EVP_marshal_private_key(&cbb, dilithium_pkey));
   ASSERT_TRUE(CBB_finish(&cbb, &der, &der_len));
+
+  EVP_PKEY_CTX_free(dilithium_pkey_ctx);
+  EVP_PKEY_free(dilithium_pkey);
 }
 
 TEST(X509Test, DilithiumPubKey) {
@@ -2063,6 +2066,9 @@ TEST(X509Test, DilithiumPubKey) {
   ASSERT_TRUE(CBB_init(&cbb, 0));
   ASSERT_TRUE(EVP_marshal_public_key(&cbb, dilithium_pkey));
   ASSERT_TRUE(CBB_finish(&cbb, &der, &der_len));
+
+  EVP_PKEY_CTX_free(dilithium_pkey_ctx);
+  EVP_PKEY_free(dilithium_pkey);
 }
 
 TEST(X509Test, DilithiumSignVerifyCert) {
@@ -2086,53 +2092,10 @@ TEST(X509Test, DilithiumSignVerifyCert) {
 
   //verify the cert
   ASSERT_TRUE(X509_verify(leaf.get(), dilithium_pkey));
+
+  EVP_PKEY_CTX_free(dilithium_pkey_ctx);
+  EVP_PKEY_free(dilithium_pkey);
 }
-
-TEST(X509Test, Dilithium3Cert) {
-  // print certs in console/to file for testing
-  //generate the dilithium key
-  // will remove the print out before merging, this is for testing the PR
-  EVP_PKEY_CTX *dilithium_pkey_ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_DILITHIUM3, nullptr);
-  ASSERT_NE(dilithium_pkey_ctx, nullptr);
-
-  EVP_PKEY *dilithium_pkey = EVP_PKEY_new();
-  ASSERT_NE(dilithium_pkey, nullptr);
-
-  EXPECT_TRUE(EVP_PKEY_keygen_init(dilithium_pkey_ctx));
-  EXPECT_TRUE(EVP_PKEY_keygen(dilithium_pkey_ctx, &dilithium_pkey));
-
-  //generate the cert
-  bssl::UniquePtr<X509> leaf =
-      MakeTestCert("Intermediate", "Leaf", dilithium_pkey, /*is_ca=*/false);
-  ASSERT_TRUE(leaf);
-
-
-  //sign the cert
-  bssl::ScopedEVP_MD_CTX md_ctx;
-  EVP_DigestSignInit(md_ctx.get(), nullptr, nullptr, nullptr, dilithium_pkey);
-  ASSERT_TRUE(X509_sign_ctx(leaf.get(), md_ctx.get()));
-  bssl::UniquePtr<X509> copy = ReencodeCertificate(leaf.get());
-
-  // print the cert
-  bssl::UniquePtr<BIO> bio(BIO_new(BIO_s_mem()));
-  X509_print_ex(bio.get(), leaf.get(), 0, 0);
-
-  const uint8_t *data;
-  size_t data_len;
-  ASSERT_TRUE(BIO_mem_contents(bio.get(), &data, &data_len));
-  std::string print(reinterpret_cast<const char*>(data), data_len);
-  printf("%sn", data);
-
-  //to file
-  FILE *fptr;
-  fptr = fopen("dilithiumcert.txt","w");
-  char buf[PEM_BUFSIZE];
-  buf[0] = '\0';
-  //ASSERT_TRUE(PEM_write(fptr, PEM_STRING_X509, buf, bio.get(), data_len));
-  PEM_write_X509(fptr, leaf.get());
-  fclose(fptr);
-}
-
 
 // Test the APIs for signing a CRL, particularly whether they correctly handle
 // the TBSCertList cache.
