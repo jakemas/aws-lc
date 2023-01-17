@@ -33,7 +33,6 @@
 #include <openssl/x509v3.h>
 
 #include "internal.h"
-#include "../dilithium/sig_dilithium.h"
 #include "../evp_extra/internal.h"
 #include "../internal.h"
 #include "../test/test_util.h"
