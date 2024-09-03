@@ -166,7 +166,7 @@ TEST(SHA3Test, NISTTestVectors_SingleShot) {
                   test_vec.NISTTestVectors_SingleShot(algorithm);
                 });
 }
-
+//TODO: fix this test now that we have changed the API
 TEST(KeccakInternalTest, SqueezeOutputBufferOverflow) {
   EVP_MD_unstable_sha3_enable(true);
 
@@ -181,7 +181,7 @@ TEST(KeccakInternalTest, SqueezeOutputBufferOverflow) {
     EXPECT_TRUE(SHA3_Init(&ctx, SHA3_PAD_CHAR, SHA3_384_DIGEST_BITLENGTH));
     out.resize(out_len + canary.size());
     std::copy(canary.begin(), canary.end(), out.end() - canary.size());
-    SHA3_Squeeze(ctx.A, out.data(), out_len, ctx.block_size);
+    SHA3_Squeeze(ctx.A, out.data(), out_len, ctx.block_size, 0);
     EXPECT_TRUE(std::equal(out.end() - canary.size(), out.end(),
                            canary.begin()) == true);
   }

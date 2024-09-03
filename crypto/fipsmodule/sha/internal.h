@@ -70,6 +70,11 @@ extern "C" {
 // SHAKE128 has the maximum block size among the SHA3/SHAKE algorithms.
 #define SHA3_MAX_BLOCKSIZE SHAKE128_BLOCKSIZE
 
+#define XOF_STATE_INIT    0
+#define XOF_STATE_ABSORB  1
+#define XOF_STATE_FINAL   2
+#define XOF_STATE_SQUEEZE 3
+
 typedef struct keccak_st KECCAK1600_CTX;
 
 // The data buffer should have at least the maximum number of
@@ -81,6 +86,7 @@ struct keccak_st {
   size_t buf_load;                                 // used bytes in below buffer
   uint8_t buf[SHA3_MAX_BLOCKSIZE];                 // should have at least the max data block size bytes
   uint8_t pad;
+  int xof_state;
 };
 // Define SHA{n}[_{variant}]_ASM if sha{n}_block_data_order[_{variant}] is
 // defined in assembly.
@@ -91,7 +97,7 @@ struct keccak_st {
 void sha1_block_data_order(uint32_t *state, const uint8_t *data,
                              size_t num_blocks);
 
-#elif !defined(OPENSSL_NO_ASM) && defined(OPENSSL_X86)
+#elif !defined(OPENSSL_NO_ASM) && (defined(OPENSSL_X86) || defined(OPENSSL_ARM))
 #define SHA1_ASM
 #define SHA256_ASM
 #define SHA512_ASM
@@ -102,35 +108,6 @@ void sha256_block_data_order(uint32_t *state, const uint8_t *data,
                              size_t num_blocks);
 void sha512_block_data_order(uint64_t *state, const uint8_t *data,
                              size_t num_blocks);
-
-#elif !defined(OPENSSL_NO_ASM) && defined(OPENSSL_ARM)
-
-#define SHA1_ASM_NOHW
-#define SHA256_ASM_NOHW
-#define SHA512_ASM_NOHW
-
-#define SHA1_ASM_HW
-OPENSSL_INLINE int sha1_hw_capable(void) {
-  return CRYPTO_is_ARMv8_SHA1_capable();
-}
-
-#define SHA1_ASM_NEON
-void sha1_block_data_order_neon(uint32_t *state, const uint8_t *data,
-                                size_t num);
-
-#define SHA256_ASM_HW
-OPENSSL_INLINE int sha256_hw_capable(void) {
-  return CRYPTO_is_ARMv8_SHA256_capable();
-}
-
-#define SHA256_ASM_NEON
-void sha256_block_data_order_neon(uint32_t *state, const uint8_t *data,
-                                  size_t num);
-
-// Armv8.2 SHA-512 instructions are not available in 32-bit.
-#define SHA512_ASM_NEON
-void sha512_block_data_order_neon(uint64_t *state, const uint8_t *data,
-                                  size_t num);
 
 #elif !defined(OPENSSL_NO_ASM) && defined(OPENSSL_AARCH64)
 
@@ -256,7 +233,6 @@ void sha256_block_data_order_nohw(uint32_t *state, const uint8_t *data,
 void sha512_block_data_order_hw(uint64_t *state, const uint8_t *data,
                                 size_t num);
 #endif
-
 #if defined(SHA512_ASM_NOHW)
 void sha512_block_data_order_nohw(uint64_t *state, const uint8_t *data,
                                   size_t num);
@@ -379,7 +355,13 @@ OPENSSL_EXPORT size_t SHA3_Absorb(uint64_t A[SHA3_ROWS][SHA3_ROWS],
 
 // SHA3_Squeeze generate |out| hash value of |len| bytes.
 OPENSSL_EXPORT void SHA3_Squeeze(uint64_t A[SHA3_ROWS][SHA3_ROWS],
-                                 uint8_t *out, size_t len, size_t r);
+                                 uint8_t *out, size_t len, size_t r, int next);
+
+// ossl_sha3_squeeze generates |out| hash value of |outlen| bytes. In addition to the
+// requested bytes,output a context that stores the current 1600 - bit state of
+// the Keccak sponge and any squeezed bytes that have not yet been output.
+// TODO: rename this to somthing more sensible
+OPENSSL_EXPORT int ossl_sha3_squeeze(KECCAK1600_CTX *ctx, unsigned char *out, size_t outlen);
 
 #if defined(__cplusplus)
 }  // extern "C"
