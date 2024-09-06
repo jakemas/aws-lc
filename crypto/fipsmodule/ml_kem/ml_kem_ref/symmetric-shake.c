@@ -73,7 +73,10 @@ void kyber_shake256_rkprf(ml_kem_params *params, uint8_t out[KYBER_SSBYTES], con
 
 void shake128_squeezeblocks(uint8_t *out, size_t nblocks, KECCAK1600_CTX *ctx)
 {
-  SHA3_Squeeze(ctx->A, out, nblocks,SHAKE128_RATE,0);
+  //SHAKE_Final(ctx);
+  //SHA3_Squeeze(ctx->A, out, SHAKE128_RATE*nblocks,SHAKE128_RATE,0);
+  ctx->md_size = nblocks * SHAKE128_RATE;
+  SHA3_Final(out, ctx);
 }
 
 

@@ -222,10 +222,14 @@ int SHA3_Final(uint8_t *md, KECCAK1600_CTX *ctx) {
     if (SHA3_Absorb(ctx->A, ctx->buf, block_size, block_size) != 0) {
       return 0;
     }
+    SHA3_Squeeze(ctx->A, md, ctx->md_size, block_size, ctx->padded);
     ctx->padded = 1;
   }
+  else {
+    SHA3_Squeeze(ctx->A, md, ctx->md_size, block_size, ctx->padded);
+  }
 
-  SHA3_Squeeze(ctx->A, md, ctx->md_size, block_size, !(ctx->padded));
+
 
   FIPS_service_indicator_update_state();
 
