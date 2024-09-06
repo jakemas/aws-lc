@@ -114,6 +114,7 @@ int SHAKE_Init(KECCAK1600_CTX *ctx, size_t block_size) {
   // The SHAKE block size depends on the security level of the algorithm only
   // It is independent of the output size
   ctx->block_size = block_size;
+  ctx->padded = 0;
   return SHA3_Init(ctx, SHAKE_PAD_CHAR, 0);
 }
 
@@ -126,6 +127,7 @@ int SHAKE_Final(uint8_t *md, KECCAK1600_CTX *ctx, size_t len) {
 void SHA3_Reset(KECCAK1600_CTX *ctx) {
   memset(ctx->A, 0, sizeof(ctx->A));
   ctx->buf_load = 0;
+  ctx->padded = 0;
 }
 
 int SHA3_Init(KECCAK1600_CTX *ctx, uint8_t pad, size_t bit_len) {
@@ -209,18 +211,21 @@ int SHA3_Final(uint8_t *md, KECCAK1600_CTX *ctx) {
     return 1;
   }
 
-   // Pad the data with 10*1. Note that |num| can be |block_size - 1|
-   // in which case both byte operations below are performed on
-   // the same byte.
-  memset(ctx->buf + num, 0, block_size - num);
-  ctx->buf[num] = ctx->pad;
-  ctx->buf[block_size - 1] |= 0x80;
+  if (!ctx->padded) {
+    // Pad the data with 10*1. Note that |num| can be |block_size - 1|
+    // in which case both byte operations below are performed on
+    // the same byte.
+    memset(ctx->buf + num, 0, block_size - num);
+    ctx->buf[num] = ctx->pad;
+    ctx->buf[block_size - 1] |= 0x80;
 
-  if (SHA3_Absorb(ctx->A, ctx->buf, block_size, block_size) != 0) {
-    return 0;
+    if (SHA3_Absorb(ctx->A, ctx->buf, block_size, block_size) != 0) {
+      return 0;
+    }
+    ctx->padded = 1;
   }
 
-  SHA3_Squeeze(ctx->A, md, ctx->md_size, block_size);
+  SHA3_Squeeze(ctx->A, md, ctx->md_size, block_size, !(ctx->padded));
 
   FIPS_service_indicator_update_state();
 

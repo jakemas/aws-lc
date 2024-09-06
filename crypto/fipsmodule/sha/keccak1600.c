@@ -356,9 +356,17 @@ size_t SHA3_Absorb(uint64_t A[SHA3_ROWS][SHA3_ROWS], const uint8_t *inp, size_t 
     return len;
 }
 
- // SHA3_Squeeze is called once at the end to generate |out| hash value
- // of |len| bytes.
-void SHA3_Squeeze(uint64_t A[SHA3_ROWS][SHA3_ROWS], uint8_t *out, size_t len, size_t r)
+/*
+ * SHA3_squeeze may be called after SHA3_absorb to generate |out| hash value of
+ * |len| bytes.
+ * If multiple SHA3_squeeze calls are required the output length |len| must be a
+ * multiple of the blocksize, with |next| being 0 on the first call and 1 on
+ * subsequent calls. It is the callers responsibility to buffer the results.
+ * When only a single call to SHA3_squeeze is required, |len| can be any size
+ * and |next| must be 0.
+ */
+void SHA3_Squeeze(uint64_t A[SHA3_ROWS][SHA3_ROWS], unsigned char *out, size_t len, size_t r,
+                  int next)
 {
     uint64_t *A_flat = (uint64_t *)A;
     size_t i, w = r / 8;
@@ -366,30 +374,30 @@ void SHA3_Squeeze(uint64_t A[SHA3_ROWS][SHA3_ROWS], uint8_t *out, size_t len, si
     assert(r < (25 * sizeof(A[0][0])) && (r % 8) == 0);
 
     while (len != 0) {
+        if (next)
+            KeccakF1600(A);
+        next = 1;
         for (i = 0; i < w && len != 0; i++) {
             uint64_t Ai = BitDeinterleave(A_flat[i]);
 
             if (len < 8) {
                 for (i = 0; i < len; i++) {
-                    *out++ = (uint8_t)Ai;
+                    *out++ = (unsigned char)Ai;
                     Ai >>= 8;
                 }
                 return;
             }
 
-            out[0] = (uint8_t)(Ai);
-            out[1] = (uint8_t)(Ai >> 8);
-            out[2] = (uint8_t)(Ai >> 16);
-            out[3] = (uint8_t)(Ai >> 24);
-            out[4] = (uint8_t)(Ai >> 32);
-            out[5] = (uint8_t)(Ai >> 40);
-            out[6] = (uint8_t)(Ai >> 48);
-            out[7] = (uint8_t)(Ai >> 56);
+            out[0] = (unsigned char)(Ai);
+            out[1] = (unsigned char)(Ai >> 8);
+            out[2] = (unsigned char)(Ai >> 16);
+            out[3] = (unsigned char)(Ai >> 24);
+            out[4] = (unsigned char)(Ai >> 32);
+            out[5] = (unsigned char)(Ai >> 40);
+            out[6] = (unsigned char)(Ai >> 48);
+            out[7] = (unsigned char)(Ai >> 56);
             out += 8;
             len -= 8;
-        }
-        if (len != 0) {
-            KeccakF1600(A);
         }
     }
 }
@@ -405,10 +413,10 @@ size_t SHA3_Absorb(uint64_t A[SHA3_ROWS][SHA3_ROWS], const uint8_t *inp, size_t 
 }
 
 size_t SHA3_Squeeze_hw(uint64_t A[SHA3_ROWS][SHA3_ROWS], const uint8_t *out, size_t len,
-                        size_t r);
+                        size_t r, int next);
 
-void SHA3_Squeeze(uint64_t A[SHA3_ROWS][SHA3_ROWS], uint8_t *out, size_t len, size_t r) {
-    SHA3_Squeeze_hw(A, out, len, r);
+void SHA3_Squeeze(uint64_t A[SHA3_ROWS][SHA3_ROWS], uint8_t *out, size_t len, size_t r, int next) {
+    SHA3_Squeeze_hw(A, out, len, r, next);
 }
 
 #endif // !KECCAK1600_ASM

@@ -80,7 +80,8 @@ struct keccak_st {
   size_t md_size;                                  // output length, variable in XOF (SHAKE)
   size_t buf_load;                                 // used bytes in below buffer
   uint8_t buf[SHA3_MAX_BLOCKSIZE];                 // should have at least the max data block size bytes
-  uint8_t pad;
+  uint8_t pad;                                     // padding character
+  uint8_t padded;                                  // denotes if padding has been performed (for multiple squeezes)
 };
 // Define SHA{n}[_{variant}]_ASM if sha{n}_block_data_order[_{variant}] is
 // defined in assembly.
@@ -379,7 +380,7 @@ OPENSSL_EXPORT size_t SHA3_Absorb(uint64_t A[SHA3_ROWS][SHA3_ROWS],
 
 // SHA3_Squeeze generate |out| hash value of |len| bytes.
 OPENSSL_EXPORT void SHA3_Squeeze(uint64_t A[SHA3_ROWS][SHA3_ROWS],
-                                 uint8_t *out, size_t len, size_t r);
+                                 uint8_t *out, size_t len, size_t r, int next);
 
 #if defined(__cplusplus)
 }  // extern "C"
