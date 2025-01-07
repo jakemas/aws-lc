@@ -51,6 +51,19 @@ int ml_dsa_44_sign(const uint8_t *private_key /* IN */,
                      ctx_string, ctx_string_len, private_key) == 0;
 }
 
+int ml_dsa_extmu_44_sign(const uint8_t *private_key /* IN */,
+                         uint8_t *sig               /* OUT */,
+                         size_t *sig_len            /* OUT */,
+                         const uint8_t *message     /* IN */,
+                         size_t message_len         /* IN */,
+                         const uint8_t *ctx_string  /* IN */,
+                         size_t ctx_string_len      /* IN */) {
+  ml_dsa_params params;
+  ml_dsa_44_params_init(&params);
+  return ml_dsa_extmu_sign(&params, sig, sig_len, message, message_len,
+                           ctx_string, ctx_string_len, private_key) == 0;
+}
+
 int ml_dsa_44_sign_internal(const uint8_t *private_key  /* IN */,
                             uint8_t *sig                /* OUT */,
                             size_t *sig_len             /* OUT */,
@@ -62,7 +75,7 @@ int ml_dsa_44_sign_internal(const uint8_t *private_key  /* IN */,
   ml_dsa_params params;
   ml_dsa_44_params_init(&params);
   return ml_dsa_sign_internal(&params, sig, sig_len, message, message_len,
-                              pre, pre_len, rnd, private_key) == 0;
+                              pre, pre_len, rnd, private_key, 0) == 0;
 }
 
 int ml_dsa_44_verify(const uint8_t *public_key /* IN */,
@@ -78,6 +91,19 @@ int ml_dsa_44_verify(const uint8_t *public_key /* IN */,
                        ctx_string, ctx_string_len, public_key) == 0;
 }
 
+int ml_dsa_extmu_44_verify(const uint8_t *public_key /* IN */,
+                           const uint8_t *sig        /* IN */,
+                           size_t sig_len            /* IN */,
+                           const uint8_t *message    /* IN */,
+                           size_t message_len        /* IN */,
+                           const uint8_t *ctx_string /* IN */,
+                           size_t ctx_string_len     /* IN */) {
+  ml_dsa_params params;
+  ml_dsa_44_params_init(&params);
+  return ml_dsa_extmu_verify(&params, sig, sig_len, message, message_len,
+                             ctx_string, ctx_string_len, public_key) == 0;
+}
+
 int ml_dsa_44_verify_internal(const uint8_t *public_key /* IN */,
                               const uint8_t *sig        /* IN */,
                               size_t sig_len            /* IN */,
@@ -88,7 +114,7 @@ int ml_dsa_44_verify_internal(const uint8_t *public_key /* IN */,
   ml_dsa_params params;
   ml_dsa_44_params_init(&params);
   return ml_dsa_verify_internal(&params, sig, sig_len, message, message_len,
-                                pre, pre_len, public_key) == 0;
+                                pre, pre_len, public_key, 0) == 0;
 }
 
 int ml_dsa_65_keypair(uint8_t *public_key   /* OUT */,
@@ -119,6 +145,19 @@ int ml_dsa_65_sign(const uint8_t *private_key /* IN */,
                      ctx_string, ctx_string_len, private_key) == 0;
 }
 
+int ml_dsa_extmu_65_sign(const uint8_t *private_key /* IN */,
+                         uint8_t *sig               /* OUT */,
+                         size_t *sig_len            /* OUT */,
+                         const uint8_t *message     /* IN */,
+                         size_t message_len         /* IN */,
+                         const uint8_t *ctx_string  /* IN */,
+                         size_t ctx_string_len      /* IN */) {
+  ml_dsa_params params;
+  ml_dsa_65_params_init(&params);
+  return ml_dsa_extmu_sign(&params, sig, sig_len, message, message_len,
+                           ctx_string, ctx_string_len, private_key) == 0;
+}
+
 int ml_dsa_65_sign_internal(const uint8_t *private_key  /* IN */,
                             uint8_t *sig                /* OUT */,
                             size_t *sig_len             /* OUT */,
@@ -130,7 +169,7 @@ int ml_dsa_65_sign_internal(const uint8_t *private_key  /* IN */,
   ml_dsa_params params;
   ml_dsa_65_params_init(&params);
   return ml_dsa_sign_internal(&params, sig, sig_len, message, message_len,
-                              pre, pre_len, rnd, private_key) == 0;
+                              pre, pre_len, rnd, private_key, 0) == 0;
 }
 
 int ml_dsa_65_verify(const uint8_t *public_key /* IN */,
@@ -146,6 +185,19 @@ int ml_dsa_65_verify(const uint8_t *public_key /* IN */,
                        ctx_string, ctx_string_len, public_key) == 0;
 }
 
+int ml_dsa_extmu_65_verify(const uint8_t *public_key /* IN */,
+                           const uint8_t *sig        /* IN */,
+                           size_t sig_len            /* IN */,
+                           const uint8_t *message    /* IN */,
+                           size_t message_len        /* IN */,
+                           const uint8_t *ctx_string /* IN */,
+                           size_t ctx_string_len     /* IN */) {
+  ml_dsa_params params;
+  ml_dsa_65_params_init(&params);
+  return ml_dsa_extmu_verify(&params, sig, sig_len, message, message_len,
+                             ctx_string, ctx_string_len, public_key) == 0;
+}
+
 int ml_dsa_65_verify_internal(const uint8_t *public_key /* IN */,
                               const uint8_t *sig        /* IN */,
                               size_t sig_len            /* IN */,
@@ -156,7 +208,7 @@ int ml_dsa_65_verify_internal(const uint8_t *public_key /* IN */,
   ml_dsa_params params;
   ml_dsa_65_params_init(&params);
   return ml_dsa_verify_internal(&params, sig, sig_len, message, message_len,
-                                pre, pre_len, public_key) == 0;
+                                pre, pre_len, public_key, 0) == 0;
 }
 
 int ml_dsa_87_keypair(uint8_t *public_key   /* OUT */,
@@ -187,6 +239,19 @@ int ml_dsa_87_sign(const uint8_t *private_key /* IN */,
                      ctx_string, ctx_string_len, private_key) == 0;
 }
 
+int ml_dsa_extmu_87_sign(const uint8_t *private_key /* IN */,
+                         uint8_t *sig               /* OUT */,
+                         size_t *sig_len            /* OUT */,
+                         const uint8_t *message     /* IN */,
+                         size_t message_len         /* IN */,
+                         const uint8_t *ctx_string  /* IN */,
+                         size_t ctx_string_len      /* IN */) {
+  ml_dsa_params params;
+  ml_dsa_87_params_init(&params);
+  return ml_dsa_extmu_sign(&params, sig, sig_len, message, message_len,
+                           ctx_string, ctx_string_len, private_key) == 0;
+}
+
 int ml_dsa_87_sign_internal(const uint8_t *private_key  /* IN */,
                             uint8_t *sig                /* OUT */,
                             size_t *sig_len             /* OUT */,
@@ -198,7 +263,7 @@ int ml_dsa_87_sign_internal(const uint8_t *private_key  /* IN */,
   ml_dsa_params params;
   ml_dsa_87_params_init(&params);
   return ml_dsa_sign_internal(&params, sig, sig_len, message, message_len,
-                              pre, pre_len, rnd, private_key) == 0;
+                              pre, pre_len, rnd, private_key, 0) == 0;
 }
 
 int ml_dsa_87_verify(const uint8_t *public_key /* IN */,
@@ -214,6 +279,19 @@ int ml_dsa_87_verify(const uint8_t *public_key /* IN */,
                        ctx_string, ctx_string_len, public_key) == 0;
 }
 
+int ml_dsa_extmu_87_verify(const uint8_t *public_key /* IN */,
+                           const uint8_t *sig        /* IN */,
+                           size_t sig_len            /* IN */,
+                           const uint8_t *message    /* IN */,
+                           size_t message_len        /* IN */,
+                           const uint8_t *ctx_string /* IN */,
+                           size_t ctx_string_len     /* IN */) {
+  ml_dsa_params params;
+  ml_dsa_87_params_init(&params);
+  return ml_dsa_extmu_verify(&params, sig, sig_len, message, message_len,
+                             ctx_string, ctx_string_len, public_key) == 0;
+}
+
 int ml_dsa_87_verify_internal(const uint8_t *public_key /* IN */,
                               const uint8_t *sig        /* IN */,
                               size_t sig_len            /* IN */,
@@ -224,5 +302,5 @@ int ml_dsa_87_verify_internal(const uint8_t *public_key /* IN */,
   ml_dsa_params params;
   ml_dsa_87_params_init(&params);
   return ml_dsa_verify_internal(&params, sig, sig_len, message, message_len,
-                                pre, pre_len, public_key) == 0;
+                                pre, pre_len, public_key,0) == 0;
 }

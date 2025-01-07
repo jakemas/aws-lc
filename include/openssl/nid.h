@@ -4379,6 +4379,15 @@ extern "C" {
 #define NID_MLDSA87 996
 #define OBJ_MLDSA87 2L, 16L, 840L, 1L, 101L, 3L, 4L, 3L, 19L
 
+#define SN_MLDSAEXTMU44 "MLDSAEXTMU44"
+#define NID_MLDSAEXTMU44 997
+
+#define SN_MLDSAEXTMU65 "MLDSAEXTMU65"
+#define NID_MLDSAEXTMU65 998
+
+#define SN_MLDSAEXTMU87 "MLDSAEXTMU87"
+#define NID_MLDSAEXTMU87 999
+
 #if defined(__cplusplus)
 } /* extern C */
 #endif

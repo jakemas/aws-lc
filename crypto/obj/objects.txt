@@ -1409,3 +1409,6 @@ nist_dsa : PQDSA
 nist_dsa 17 : MLDSA44
 nist_dsa 18 : MLDSA65
 nist_dsa 19 : MLDSA87
+            : MLDSAEXTMU44
+            : MLDSAEXTMU65
+            : MLDSAEXTMU87

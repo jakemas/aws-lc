@@ -11,9 +11,9 @@
 
 #include <vector>
 #include "../fipsmodule/evp/internal.h"
-#include "../internal.h"
 #include "../fipsmodule/pqdsa/internal.h"
-
+#include "../fipsmodule/sha/internal.h"
+#include "../internal.h"
 #ifdef ENABLE_DILITHIUM
 
 #include "../fipsmodule/ml_dsa/ml_dsa.h"
@@ -1517,6 +1517,70 @@ TEST_P(PQDSAParameterTest, ParsePublicKey) {
   CBS_init(&cbs, der, der_len);
   bssl::UniquePtr<EVP_PKEY> pkey_from_der(EVP_parse_public_key(&cbs));
   ASSERT_TRUE(pkey_from_der);
+}
+
+TEST_P(PQDSAParameterTest, ExternalMu) {
+  // ---- 1. Setup phase: generate PQDSA EVP KEY and sign/verify contexts ----
+  bssl::UniquePtr<EVP_PKEY> pkey(generate_key_pair(GetParam().nid + 3));
+  bssl::ScopedEVP_MD_CTX md_ctx, md_ctx_verify, md_ctx_verify1;
+
+  std::vector<uint8_t> msg1 = {
+    0x4a, 0x41, 0x4b, 0x45, 0x20, 0x4d, 0x41, 0x53, 0x53, 0x49,
+    0x4d, 0x4f, 0x20, 0x41, 0x57, 0x53, 0x32, 0x30, 0x32, 0x32, 0x2e};
+
+  // ----2. Pre-hash setup phase: compute tr, mu ----
+  size_t TRBYTES = 64;
+  size_t CRHBYTES = 64;
+  size_t pk_len = GetParam().public_key_len;
+
+  std::vector<uint8_t> pk(pk_len);
+  std::vector<uint8_t> tr(TRBYTES);
+  std::vector<uint8_t> mu(TRBYTES);
+
+  uint8_t pre[2];
+  pre[0] = 0;
+  pre[1] = 0;
+
+  //get public key
+  ASSERT_TRUE(EVP_PKEY_get_raw_public_key(pkey.get(), pk.data(), &pk_len));
+  //hash it
+  SHAKE256(pk.data(), pk.size(), tr.data(), TRBYTES);
+
+  //compute mu
+  KECCAK1600_CTX state;
+  SHAKE_Init(&state, SHAKE256_BLOCKSIZE);
+  SHA3_Update(&state, tr.data(), TRBYTES);
+  SHA3_Update(&state, pre, 2);
+  SHA3_Update(&state, msg1.data(), msg1.size());
+  SHAKE_Final(mu.data(), &state, CRHBYTES);
+
+  // ----2. Init signing, get signature size and allocate signature buffer ----
+  ASSERT_TRUE(EVP_DigestSignInit(md_ctx.get(), nullptr, nullptr, nullptr, pkey.get()));
+
+  // Get expected signature size
+  size_t sig_len = 0;
+  ASSERT_TRUE(EVP_DigestSign(md_ctx.get(), nullptr, &sig_len, mu.data(), mu.size()));
+
+  // Verify that the returned signature size is as expected, allocate memory for the signature
+  ASSERT_EQ(sig_len, GetParam().signature_len);
+  std::vector<uint8_t> sig1(sig_len);
+  // ----3. Sign mu ----
+  ASSERT_TRUE(EVP_DigestSign(md_ctx.get(), sig1.data(), &sig_len, mu.data(), mu.size()));
+
+  // ----4. Verify mu (pre-hash, with pkey type NID_MLDSAXXEXTMU) ----
+  ASSERT_TRUE(EVP_DigestVerifyInit(md_ctx_verify1.get(), nullptr, nullptr, nullptr, pkey.get()));
+  ASSERT_TRUE(EVP_DigestVerify(md_ctx_verify1.get(), sig1.data(), sig_len, mu.data(), mu.size()));
+
+  // ----5. Verify original message m (no pre-hash, with pkey type NID_MLDSAXX)----
+
+  // first generate a new EVP_PKEY of the type NID_MLDSAXX (the lack of EXT in
+  // the NID will mean the non-external pkey method is used)
+  bssl::UniquePtr<EVP_PKEY>verify_pkey(
+EVP_PKEY_pqdsa_new_raw_public_key(GetParam().nid,pk.data(), pk.size()));
+
+  // Verify the correct signed message
+  ASSERT_TRUE(EVP_DigestVerifyInit(md_ctx_verify.get(), nullptr, nullptr, nullptr, verify_pkey.get()));
+  ASSERT_TRUE(EVP_DigestVerify(md_ctx_verify.get(), sig1.data(), sig_len, msg1.data(), msg1.size()));
 }
 
 #else
