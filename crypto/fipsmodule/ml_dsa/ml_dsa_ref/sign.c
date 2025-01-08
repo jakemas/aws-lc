@@ -539,42 +539,6 @@ int ml_dsa_verify(ml_dsa_params *params,
 }
 
 /*************************************************
-* Name:        ml_dsa_extmu_verify
-*
-* Description: FIPS 204: Algorithm 3 ML-DSA.Verify external mu variant.
-*              Verifies signature.
-*
-* Arguments:   - ml_dsa_params: parameter struct
-*              - uint8_t *m: pointer to input signature
-*              - size_t siglen: length of signature
-*              - const uint8_t *mu: pointer to mu
-*              - size_t mulen: length of mu
-*              - const uint8_t *ctx: pointer to context string
-*              - size_t ctxlen: length of context string
-*              - const uint8_t *pk: pointer to bit-packed public key
-*              - int prehash: boolean flag if set input message is mu
-*
-* Returns 0 if signature could be verified correctly and -1 otherwise
-**************************************************/
-int ml_dsa_extmu_verify(ml_dsa_params *params,
-                        const uint8_t *sig,
-                        size_t siglen,
-                        const uint8_t *mu,
-                        size_t mulen,
-                        const uint8_t *ctx,
-                        size_t ctxlen,
-                        const uint8_t *pk)
-{
-  //unused? maybe we inline crypto_sign_verify_internal
-  //yeah coz ctx is in the prehash
-  uint8_t pre[257];
-  pre[0] = 0;
-  pre[1] = ctxlen;
-  OPENSSL_memcpy(pre + 2 , ctx, ctxlen);
-  return ml_dsa_verify_internal(params, sig, siglen, mu, mulen, pre, 2 + ctxlen, pk, 1);
-}
-
-/*************************************************
 * Name:        ml_dsa_verify_message
 *
 * Description: Verify signed message.

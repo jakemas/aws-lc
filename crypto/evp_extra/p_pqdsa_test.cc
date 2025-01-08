@@ -1519,9 +1519,31 @@ TEST_P(PQDSAParameterTest, ParsePublicKey) {
   ASSERT_TRUE(pkey_from_der);
 }
 
-TEST_P(PQDSAParameterTest, ExternalMu) {
+// ML-DSA specific test framework to test pre-hash modes only applicable to ML-DSA
+struct KnownMLDSA {
+  const char name[20];
+  const int nid;
+  const int extmu_nid;
+  const size_t public_key_len;
+  const size_t private_key_len;
+  const size_t signature_len;
+};
+
+static const struct KnownMLDSA kMLDSAs[] = {
+  {"MLDSA44", NID_MLDSA44, NID_MLDSAEXTMU44, 1312, 2560, 2420},
+  {"MLDSA65", NID_MLDSA65, NID_MLDSAEXTMU65, 1952, 4032, 3309},
+  {"MLDSA87", NID_MLDSA87, NID_MLDSAEXTMU87, 2592, 4896, 4627},
+};
+
+class PerMLDSATest : public testing::TestWithParam<KnownMLDSA> {};
+
+INSTANTIATE_TEST_SUITE_P(All, PerMLDSATest, testing::ValuesIn(kMLDSAs),
+                         [](const testing::TestParamInfo<KnownMLDSA> &params)
+                             -> std::string { return params.param.name; });
+
+TEST_P(PerMLDSATest, ExternalMu) {
   // ---- 1. Setup phase: generate PQDSA EVP KEY and sign/verify contexts ----
-  bssl::UniquePtr<EVP_PKEY> pkey(generate_key_pair(GetParam().nid + 3));
+  bssl::UniquePtr<EVP_PKEY> pkey(generate_key_pair(GetParam().extmu_nid));
   bssl::ScopedEVP_MD_CTX md_ctx, md_ctx_verify, md_ctx_verify1;
 
   std::vector<uint8_t> msg1 = {
@@ -1541,9 +1563,8 @@ TEST_P(PQDSAParameterTest, ExternalMu) {
   pre[0] = 0;
   pre[1] = 0;
 
-  //get public key
+  //get public key and hash it
   ASSERT_TRUE(EVP_PKEY_get_raw_public_key(pkey.get(), pk.data(), &pk_len));
-  //hash it
   SHAKE256(pk.data(), pk.size(), tr.data(), TRBYTES);
 
   //compute mu
@@ -1564,6 +1585,7 @@ TEST_P(PQDSAParameterTest, ExternalMu) {
   // Verify that the returned signature size is as expected, allocate memory for the signature
   ASSERT_EQ(sig_len, GetParam().signature_len);
   std::vector<uint8_t> sig1(sig_len);
+
   // ----3. Sign mu ----
   ASSERT_TRUE(EVP_DigestSign(md_ctx.get(), sig1.data(), &sig_len, mu.data(), mu.size()));
 
@@ -1571,14 +1593,19 @@ TEST_P(PQDSAParameterTest, ExternalMu) {
   ASSERT_TRUE(EVP_DigestVerifyInit(md_ctx_verify1.get(), nullptr, nullptr, nullptr, pkey.get()));
   ASSERT_TRUE(EVP_DigestVerify(md_ctx_verify1.get(), sig1.data(), sig_len, mu.data(), mu.size()));
 
-  // ----5. Verify original message m (no pre-hash, with pkey type NID_MLDSAXX)----
+  // ----5. Verify original message m (no pre-hash, with pkey type NID_MLDSAXX) ----
+  // one of the beneifts to external-mu ML-DSA is that signatures are compatible
+  // with pure ML-DSA. This means that signing a message M in pure mode will
+  // produce the same signature as signing the hash of that message in pre-hash
+  // mode. To evidence this, verify the signature produce by pre-hash sign
+  // using pure mode verify.
 
-  // first generate a new EVP_PKEY of the type NID_MLDSAXX (the lack of EXT in
-  // the NID will mean the non-external pkey method is used)
+  // first generate a new EVP_PKEY of the type NID_MLDSAXX (the lack of EXTMU in
+  // the NID will mean the pure mode verify is inacted).
   bssl::UniquePtr<EVP_PKEY>verify_pkey(
-EVP_PKEY_pqdsa_new_raw_public_key(GetParam().nid,pk.data(), pk.size()));
+    EVP_PKEY_pqdsa_new_raw_public_key(GetParam().nid,pk.data(), pk.size()));
 
-  // Verify the correct signed message
+  // Verify the raw message instead of the pre-hashed one
   ASSERT_TRUE(EVP_DigestVerifyInit(md_ctx_verify.get(), nullptr, nullptr, nullptr, verify_pkey.get()));
   ASSERT_TRUE(EVP_DigestVerify(md_ctx_verify.get(), sig1.data(), sig_len, msg1.data(), msg1.size()));
 }

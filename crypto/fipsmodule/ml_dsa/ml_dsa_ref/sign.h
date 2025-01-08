@@ -44,12 +44,6 @@ int ml_dsa_verify(ml_dsa_params *params,
                   const uint8_t *ctx, size_t ctxlen,
                   const uint8_t *pk);
 
-int ml_dsa_extmu_verify(ml_dsa_params *params,
-                        const uint8_t *sig, size_t siglen,
-                        const uint8_t *mu, size_t mulen,
-                        const uint8_t *ctx, size_t ctxlen,
-                        const uint8_t *pk);
-
 int ml_dsa_verify_internal(ml_dsa_params *params,
                            const uint8_t *sig, size_t siglen,
                            const uint8_t *m, size_t mlen,
