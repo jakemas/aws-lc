@@ -3218,19 +3218,19 @@ static bool ML_DSA_SIGGEN(const Span<const uint8_t> args[],
   if (extmu_str == "False") {
     if (nid == NID_MLDSA44) {
       if (!ml_dsa_44_sign_internal(sk.data(), signature.data(), &signature_len,
-                                   msg.data(), msg.size(), context.data(), context.size(), rnd.data())) {
+                                   msg.data(), msg.size(), nullptr, 0, rnd.data())) {
         return false;
       }
     }
     else if (nid == NID_MLDSA65) {
       if (!ml_dsa_65_sign_internal(sk.data(), signature.data(), &signature_len,
-                                   msg.data(), msg.size(), context.data(), context.size(), rnd.data())) {
+                                   msg.data(), msg.size(), nullptr, 0, rnd.data())) {
         return false;
       }
     }
     else if (nid == NID_MLDSA87) {
       if (!ml_dsa_87_sign_internal(sk.data(), signature.data(), &signature_len,
-                                   msg.data(), msg.size(), context.data(), context.size(), rnd.data())) {
+                                   msg.data(), msg.size(), nullptr, 0, rnd.data())) {
         return false;
       }
     }
@@ -3276,19 +3276,19 @@ static bool ML_DSA_SIGVER(const Span<const uint8_t> args[], ReplyCallback write_
   if (extmu_str == "false") {
     if (nid == NID_MLDSA44) {
       if (ml_dsa_44_verify_internal(pk.data(), sig.data(), sig.size(), msg.data(),
-                                    msg.size(), context.data(), context.size())) {
+                                    msg.size(), nullptr, 0)) {
         reply[0] = 1;
       }
     }
     else if (nid == NID_MLDSA65) {
       if (ml_dsa_65_verify_internal(pk.data(), sig.data(), sig.size(), msg.data(),
-                                    msg.size(), context.data(), context.size())) {
+                                    msg.size(), nullptr, 0)) {
         reply[0] = 1;
       }
     }
     else if (nid == NID_MLDSA87) {
       if (ml_dsa_87_verify_internal(pk.data(), sig.data(), sig.size(), msg.data(),
-                                    msg.size(), context.data(), context.size())) {
+                                    msg.size(), nullptr, 0)) {
         reply[0] = 1;
       }
     }
