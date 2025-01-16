@@ -3291,13 +3291,13 @@ static bool ML_DSA_SIGVER(const Span<const uint8_t> args[],
   }
   else{
     if (nid == NID_MLDSA44) {
-      if (ml_dsa_extmu_87_verify_internal(pk.data(), sig.data(), sig.size(), msg.data(),
+      if (ml_dsa_extmu_44_verify_internal(pk.data(), sig.data(), sig.size(), msg.data(),
                                           msg.size(), nullptr, 0)) {
         reply[0] = 1;
       }
     }
     else if (nid == NID_MLDSA65) {
-      if (ml_dsa_extmu_87_verify_internal(pk.data(), sig.data(), sig.size(), msg.data(),
+      if (ml_dsa_extmu_65_verify_internal(pk.data(), sig.data(), sig.size(), msg.data(),
                                           msg.size(), nullptr, 0)) {
         reply[0] = 1;
       }
