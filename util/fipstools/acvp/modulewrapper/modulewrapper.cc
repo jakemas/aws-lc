@@ -64,6 +64,7 @@
 
 namespace bssl {
 namespace acvp {
+
 #if defined(OPENSSL_TRUSTY)
 #include <trusty_log.h>
 #define LOG_ERROR(...) TLOGE(__VA_ARGS__)
@@ -79,7 +80,7 @@ constexpr size_t kMaxArgLength = (1 << 20);
 RequestBuffer::~RequestBuffer() = default;
 
 class RequestBufferImpl : public RequestBuffer {
-public:
+ public:
   ~RequestBufferImpl() = default;
 
   std::vector<uint8_t> buf;
@@ -123,7 +124,7 @@ Span<const Span<const uint8_t>> ParseArgsFromStream(std::istream *stream,
   if (num_args > 1 &&
       !ReadAll(stream, &nums[2], sizeof(uint32_t) * (num_args - 1))) {
     return empty_span;
-      }
+  }
 
   size_t need = 0;
   for (size_t i = 0; i < num_args; i++) {
@@ -1707,7 +1708,7 @@ static bool AES_XTS(const Span<const uint8_t> args[],
                             iv.data())) {
       LOG_ERROR("Failed XTS encrypt setup");
       return false;
-                            }
+    }
     if (!EVP_EncryptUpdate(ctx.get(), out.data(), &len, in.data(), in.size())) {
       LOG_ERROR("Failed XTS encrypt");
       return false;
@@ -1717,7 +1718,7 @@ static bool AES_XTS(const Span<const uint8_t> args[],
                             iv.data())) {
       LOG_ERROR("Failed XTS decrypt setup");
       return false;
-                            }
+    }
     if (!EVP_DecryptUpdate(ctx.get(), out.data(), &len, in.data(), in.size())) {
       LOG_ERROR("Failed XTS decrypt");
       return false;
@@ -1738,7 +1739,7 @@ static bool AES_CBC(const Span<const uint8_t> args[],
   if (args[1].size() % AES_BLOCK_SIZE != 0 || args[1].empty() ||
       args[2].size() != AES_BLOCK_SIZE) {
     return false;
-      }
+  }
   std::vector<uint8_t> input(args[1].begin(), args[1].end());
   std::vector<uint8_t> iv(args[2].begin(), args[2].end());
   const uint32_t iterations = GetIterations(args[3]);
@@ -1784,7 +1785,7 @@ static bool AES_CTR(const Span<const uint8_t> args[],
       memcmp(args[3].data(), &kOneIteration, sizeof(kOneIteration))) {
     LOG_ERROR("Only a single iteration supported with AES-CTR\n");
     return false;
-      }
+  }
 
   AES_KEY key;
   if (AES_set_encrypt_key(args[0].data(), args[0].size() * 8, &key) != 0) {
@@ -1825,14 +1826,14 @@ static bool AESGCMSetup(EVP_AEAD_CTX *ctx, Span<const uint8_t> tag_len_span,
     switch (key.size()) {
       case 16:
         aead = EVP_aead_aes_128_gcm_randnonce();
-      break;
+        break;
       case 32:
         aead = EVP_aead_aes_256_gcm_randnonce();
-      break;
+        break;
       default:
         LOG_ERROR("Bad AES-GCM key length %u\n",
                   static_cast<unsigned>(key.size()));
-      return false;
+        return false;
     }
     // The 12-byte nonce is appended to the tag and is generated internally for
     // random nonce function. Thus, the "tag" must be extended by 12 bytes
@@ -1842,30 +1843,30 @@ static bool AESGCMSetup(EVP_AEAD_CTX *ctx, Span<const uint8_t> tag_len_span,
       LOG_ERROR("Failed to setup AES-GCM with tag length %u\n",
                 static_cast<unsigned>(tag_len_32));
       return false;
-                           }
+    }
   } else {
     // External IVs
     switch (key.size()) {
       case 16:
         aead = EVP_aead_aes_128_gcm_tls12();
-      break;
+        break;
       case 24:
         aead = EVP_aead_aes_192_gcm();
-      break;
+        break;
       case 32:
         aead = EVP_aead_aes_256_gcm_tls12();
-      break;
+        break;
       default:
         LOG_ERROR("Bad AES-GCM key length %u\n",
                   static_cast<unsigned>(key.size()));
-      return false;
+        return false;
     }
     if (!EVP_AEAD_CTX_init(ctx, aead, key.data(), key.size(), tag_len_32,
                            nullptr)) {
       LOG_ERROR("Failed to setup AES-GCM with tag length %u\n",
                 static_cast<unsigned>(tag_len_32));
       return false;
-                           }
+    }
   }
 
 
@@ -1886,17 +1887,17 @@ static bool AESCCMSetup(EVP_AEAD_CTX *ctx, Span<const uint8_t> tag_len_span,
   switch (tag_len_32) {
     case 4:
       aead = EVP_aead_aes_128_ccm_bluetooth();
-    break;
+      break;
 
     case 8:
       aead = EVP_aead_aes_128_ccm_bluetooth_8();
-    break;
+      break;
 
     default:
       LOG_ERROR(
           "AES-CCM only supports 4- and 8-byte tags, but %u was requested\n",
           static_cast<unsigned>(tag_len_32));
-    return false;
+      return false;
   }
 
   if (key.size() != 16) {
@@ -1910,7 +1911,7 @@ static bool AESCCMSetup(EVP_AEAD_CTX *ctx, Span<const uint8_t> tag_len_span,
     LOG_ERROR("Failed to setup AES-CCM with tag length %u\n",
               static_cast<unsigned>(tag_len_32));
     return false;
-                         }
+  }
 
   return true;
 }
@@ -1943,14 +1944,14 @@ static bool AEADSeal(const Span<const uint8_t> args[],
                            0, plaintext.data(), plaintext.size(), ad.data(),
                            ad.size())) {
       return false;
-                           }
+    }
   } else {
     // External IV AEAD sealing.
     if (!EVP_AEAD_CTX_seal(ctx.get(), out.data(), &out_len, out.size(),
                            nonce.data(), nonce.size(), plaintext.data(),
                            plaintext.size(), ad.data(), ad.size())) {
       return false;
-                           }
+    }
   }
 
   out.resize(out_len);
@@ -1981,7 +1982,7 @@ static bool AEADOpen(const Span<const uint8_t> args[],
                          ciphertext.size(), ad.data(), ad.size())) {
     return write_reply(
         {Span<const uint8_t>(success_flag), Span<const uint8_t>()});
-                         }
+  }
 
   out.resize(out_len);
   success_flag[0] = 1;
@@ -1996,7 +1997,7 @@ static bool AESPaddedKeyWrapSetup(AES_KEY *out, bool decrypt,
     LOG_ERROR("Invalid AES key length for AES-KW(P): %u\n",
               static_cast<unsigned>(key.size()));
     return false;
-          }
+  }
   return true;
 }
 
@@ -2024,14 +2025,14 @@ static bool AESKeyWrapSeal(const Span<const uint8_t> args[],
   if (!AESKeyWrapSetup(&aes, /*decrypt=*/false, key, plaintext) ||
       plaintext.size() > INT_MAX - 8) {
     return false;
-      }
+  }
 
   std::vector<uint8_t> out(plaintext.size() + 8);
   if (AES_wrap_key(&aes, /*iv=*/nullptr, out.data(), plaintext.data(),
                    plaintext.size()) != static_cast<int>(out.size())) {
     LOG_ERROR("AES-KW failed\n");
     return false;
-                   }
+  }
 
   return write_reply({Span<const uint8_t>(out)});
 }
@@ -2045,7 +2046,7 @@ static bool AESKeyWrapOpen(const Span<const uint8_t> args[],
   if (!AESKeyWrapSetup(&aes, /*decrypt=*/true, key, ciphertext) ||
       ciphertext.size() < 8 || ciphertext.size() > INT_MAX) {
     return false;
-      }
+  }
 
   std::vector<uint8_t> out(ciphertext.size() - 8);
   uint8_t success_flag[1] = {0};
@@ -2053,7 +2054,7 @@ static bool AESKeyWrapOpen(const Span<const uint8_t> args[],
                      ciphertext.size()) != static_cast<int>(out.size())) {
     return write_reply(
         {Span<const uint8_t>(success_flag), Span<const uint8_t>()});
-                     }
+  }
 
   success_flag[0] = 1;
   return write_reply(
@@ -2069,7 +2070,7 @@ static bool AESPaddedKeyWrapSeal(const Span<const uint8_t> args[],
   if (!AESPaddedKeyWrapSetup(&aes, /*decrypt=*/false, key) ||
       plaintext.size() + 15 < 15) {
     return false;
-      }
+  }
 
   std::vector<uint8_t> out(plaintext.size() + 15);
   size_t out_len;
@@ -2077,7 +2078,7 @@ static bool AESPaddedKeyWrapSeal(const Span<const uint8_t> args[],
                            plaintext.data(), plaintext.size())) {
     LOG_ERROR("AES-KWP failed\n");
     return false;
-                           }
+  }
 
   out.resize(out_len);
   return write_reply({Span<const uint8_t>(out)});
@@ -2092,7 +2093,7 @@ static bool AESPaddedKeyWrapOpen(const Span<const uint8_t> args[],
   if (!AESPaddedKeyWrapSetup(&aes, /*decrypt=*/true, key) ||
       ciphertext.size() % 8) {
     return false;
-      }
+  }
 
   std::vector<uint8_t> out(ciphertext.size());
   size_t out_len;
@@ -2101,7 +2102,7 @@ static bool AESPaddedKeyWrapOpen(const Span<const uint8_t> args[],
                              ciphertext.data(), ciphertext.size())) {
     return write_reply(
         {Span<const uint8_t>(success_flag), Span<const uint8_t>()});
-                             }
+  }
 
   success_flag[0] = 1;
   out.resize(out_len);
@@ -2123,7 +2124,7 @@ static bool TDES(const Span<const uint8_t> args[], ReplyCallback write_reply) {
                          Encrypt ? 1 : 0) ||
       !EVP_CIPHER_CTX_set_padding(ctx.get(), 0)) {
     return false;
-      }
+  }
 
   if (args[1].size() % 8) {
     LOG_ERROR("Bad input length %u for 3DES.\n",
@@ -2147,7 +2148,7 @@ static bool TDES(const Span<const uint8_t> args[], ReplyCallback write_reply) {
                           result.size()) ||
         out_len != static_cast<int>(result.size())) {
       return false;
-        }
+    }
   }
 
   return write_reply({Span<const uint8_t>(result),
@@ -2188,7 +2189,7 @@ static bool TDES_CBC(const Span<const uint8_t> args[],
                          Encrypt ? 1 : 0) ||
       !EVP_CIPHER_CTX_set_padding(ctx.get(), 0)) {
     return false;
-      }
+  }
 
   for (uint32_t j = 0; j < iterations; j++) {
     prev_prev_result = prev_result;
@@ -2202,7 +2203,7 @@ static bool TDES_CBC(const Span<const uint8_t> args[],
         !EVP_CipherFinal_ex(ctx.get(), result.data() + out_len, &out_len2) ||
         (out_len + out_len2) != static_cast<int>(result.size())) {
       return false;
-        }
+    }
 
     if (Encrypt) {
       if (j == 0) {
@@ -2232,7 +2233,7 @@ static bool HMAC(const Span<const uint8_t> args[], ReplyCallback write_reply) {
   if (::HMAC(md, args[1].data(), args[1].size(), args[0].data(), args[0].size(),
              digest, &digest_len) == nullptr) {
     return false;
-             }
+  }
 
   // HMAC computation with precomputed keys
   // The purpose of this call is to test |HMAC_set_precomputed_key_export| and
@@ -2243,13 +2244,13 @@ static bool HMAC(const Span<const uint8_t> args[], ReplyCallback write_reply) {
                              args[0].size(), digest_with_precompute,
                              &digest_with_precompute_len) == nullptr) {
     return false;
-                             }
+  }
 
   // The two HMAC computations must yield exactly the same results
   if (digest_len != digest_with_precompute_len ||
       memcmp(digest, digest_with_precompute, digest_len) != 0) {
     return false;
-      }
+  }
 
   return write_reply({Span<const uint8_t>(digest, digest_len)});
 }
@@ -2282,7 +2283,7 @@ static bool DRBG(const Span<const uint8_t> args[], ReplyCallback write_reply) {
       // nonces are not supported
       nonce.size() != 0) {
     return false;
-      }
+  }
   memcpy(&out_len, out_len_bytes.data(), sizeof(out_len));
   if (out_len > (1 << 24)) {
     return false;
@@ -2301,7 +2302,7 @@ static bool DRBG(const Span<const uint8_t> args[], ReplyCallback write_reply) {
       !CTR_DRBG_generate(&drbg, out.data(), out_len, additional_data2.data(),
                          additional_data2.size())) {
     return false;
-                         }
+  }
 
   return write_reply({Span<const uint8_t>(out)});
 }
@@ -2343,7 +2344,7 @@ static std::pair<std::vector<uint8_t>, std::vector<uint8_t>> GetPublicKeyBytes(
                                            EC_KEY_get0_public_key(key), x.get(),
                                            y.get(), /*ctx=*/nullptr)) {
     abort();
-                                           }
+  }
 
   std::vector<uint8_t> x_bytes = BIGNUMBytes(x.get());
   std::vector<uint8_t> y_bytes = BIGNUMBytes(y.get());
@@ -2391,9 +2392,9 @@ static bool ECDSAKeyVer(const Span<const uint8_t> args[],
       !EC_KEY_set_public_key(key.get(), point.get()) ||
       !EC_KEY_check_fips(key.get())) {
     reply[0] = 0;
-      } else {
-        reply[0] = 1;
-      }
+  } else {
+    reply[0] = 1;
+  }
 
   return write_reply({Span<const uint8_t>(reply)});
 }
@@ -2450,12 +2451,12 @@ static bool ECDSASigGen(const Span<const uint8_t> args[],
   if (!EVP_DigestSignInit(ctx.get(), &pctx, hash, nullptr, evp_pkey.get()) ||
       !EVP_DigestSign(ctx.get(), nullptr, &len, msg.data(), msg.size())) {
     return false;
-      }
+  }
   sig_der.resize(len);
   if (!EVP_DigestSign(ctx.get(), sig_der.data(), &len, msg.data(),
                       msg.size())) {
     return false;
-                      }
+  }
   bssl::UniquePtr<ECDSA_SIG> sig(ECDSA_SIG_from_bytes(sig_der.data(), len));
   if (!sig) {
     return false;
@@ -2494,7 +2495,7 @@ static bool ECDSASigVer(const Span<const uint8_t> args[],
       !EC_KEY_set_public_key(key.get(), point.get()) ||
       !EC_KEY_check_fips(key.get())) {
     return false;
-      }
+  }
   bssl::ScopedEVP_MD_CTX ctx;
   EVP_PKEY_CTX *pctx;
   bssl::UniquePtr<EVP_PKEY> evp_pkey(EVP_PKEY_new());
@@ -2505,9 +2506,9 @@ static bool ECDSASigVer(const Span<const uint8_t> args[],
   if (!EVP_DigestVerifyInit(ctx.get(), &pctx, hash, nullptr, evp_pkey.get()) ||
       !EVP_DigestVerify(ctx.get(), der, der_len, msg.data(), msg.size())) {
     reply[0] = 0;
-      } else {
-        reply[0] = 1;
-      }
+  } else {
+    reply[0] = 1;
+  }
   ERR_clear_error();
 
   return write_reply({Span<const uint8_t>(reply)});
@@ -2519,7 +2520,7 @@ static bool CMAC_AES(const Span<const uint8_t> args[],
   if (!AES_CMAC(mac, args[1].data(), args[1].size(), args[2].data(),
                 args[2].size())) {
     return false;
-                }
+  }
 
   uint32_t mac_len;
   if (args[0].size() != sizeof(mac_len)) {
@@ -2542,7 +2543,7 @@ static bool CMAC_AESVerify(const Span<const uint8_t> args[],
                 args[1].size()) ||
       args[2].size() > sizeof(mac)) {
     return false;
-      }
+  }
 
   const uint8_t ok = (OPENSSL_memcmp(mac, args[2].data(), args[2].size()) == 0);
   return write_reply({Span<const uint8_t>(&ok, sizeof(ok))});
@@ -2599,7 +2600,7 @@ static bool RSAKeyGen(const Span<const uint8_t> args[],
   if (!write_reply({BIGNUMBytes(e), BIGNUMBytes(p), BIGNUMBytes(q),
                     BIGNUMBytes(n), BIGNUMBytes(d)})) {
     return false;
-                    }
+  }
 
   if (AddRSAKeyToCache(rsa, bits) == nullptr) {
     return false;
@@ -2636,12 +2637,12 @@ static bool RSASigGen(const Span<const uint8_t> args[],
        !EVP_PKEY_CTX_set_rsa_pss_saltlen(pctx, RSA_PSS_SALTLEN_DIGEST)) ||
       !EVP_DigestSign(ctx.get(), nullptr, &sig_len, msg.data(), msg.size())) {
     return false;
-      }
+  }
   sig.resize(sig_len);
   if (!EVP_DigestSign(ctx.get(), sig.data(), &sig_len, msg.data(),
                       msg.size())) {
     return false;
-                      }
+  }
 
   return write_reply(
       {BIGNUMBytes(RSA_get0_n(rsa)), BIGNUMBytes(RSA_get0_e(rsa)), sig});
@@ -2662,7 +2663,7 @@ static bool RSASigVer(const Span<const uint8_t> args[],
       !BN_bin2bn(e_bytes.data(), e_bytes.size(), e) ||
       !RSA_set0_key(key.get(), n, e, /*d=*/nullptr)) {
     return false;
-      }
+  }
 
   const EVP_MD *const md = MDFunc();
   bssl::ScopedEVP_MD_CTX ctx;
@@ -2680,9 +2681,9 @@ static bool RSASigVer(const Span<const uint8_t> args[],
       !EVP_DigestVerify(ctx.get(), sig.data(), sig.size(), msg.data(),
                         msg.size())) {
     ok = 0;
-                        } else {
-                          ok = 1;
-                        }
+  } else {
+    ok = 1;
+  }
   ERR_clear_error();
 
   return write_reply({Span<const uint8_t>(&ok, 1)});
@@ -2710,7 +2711,7 @@ static bool TLSKDF(const Span<const uint8_t> args[],
                        label.size(), seed1.data(), seed1.size(), seed2.data(),
                        seed2.size())) {
     return 0;
-                       }
+  }
 
   return write_reply({out});
 }
@@ -2730,7 +2731,7 @@ static bool ECDH(const Span<const uint8_t> args[], ReplyCallback write_reply) {
           group, their_point.get(), their_x.get(), their_y.get(), ctx.get())) {
     LOG_ERROR("Invalid peer point for ECDH.\n");
     return false;
-          }
+  }
 
   if (!private_key.empty()) {
     bssl::UniquePtr<BIGNUM> our_k(BytesToBIGNUM(private_key));
@@ -2745,7 +2746,7 @@ static bool ECDH(const Span<const uint8_t> args[], ReplyCallback write_reply) {
         !EC_KEY_set_public_key(ec_key.get(), our_pub.get())) {
       LOG_ERROR("Calculating public key failed.\n");
       return false;
-        }
+    }
   } else if (!EC_KEY_generate_key_fips(ec_key.get())) {
     LOG_ERROR("EC_KEY_generate_key_fips failed.\n");
     return false;
@@ -2773,7 +2774,7 @@ static bool ECDH(const Span<const uint8_t> args[], ReplyCallback write_reply) {
                                            ctx.get())) {
     LOG_ERROR("EC_POINT_get_affine_coordinates_GFp failed.\n");
     return false;
-                                           }
+  }
 
   return write_reply({BIGNUMBytes(x.get()), BIGNUMBytes(y.get()), output});
 }
@@ -2819,7 +2820,7 @@ static bool FFDH(const Span<const uint8_t> args[], ReplyCallback write_reply) {
       static_cast<int>(z.size())) {
     LOG_ERROR("DH_compute_key_hashed failed.\n");
     return false;
-      }
+  }
 
   return write_reply({BIGNUMBytes(DH_get0_pub_key(dh.get())), z});
 }
@@ -2848,7 +2849,7 @@ static bool PBKDF(const Span<const uint8_t> args[], ReplyCallback write_reply) {
                          iterations_uint, hmac_alg, key_len_uint,
                          out_key.data())) {
     return false;
-                         }
+  }
 
   return write_reply({Span<const uint8_t>(out_key)});
 }
@@ -2869,7 +2870,7 @@ static bool HKDF(const Span<const uint8_t> args[], ReplyCallback write_reply) {
   if (!::HKDF(out_key.data(), out_bytes_uint, md, key.data(), key.size(),
               salt.data(), salt.size(), info.data(), info.size())) {
     return false;
-              }
+  }
 
   return write_reply({Span<const uint8_t>(out_key)});
 }
@@ -2889,7 +2890,7 @@ static bool SSKDF_DIGEST(const Span<const uint8_t> args[],
   if (!::SSKDF_digest(out_key.data(), out_bytes_uint32, md, key.data(),
                       key.size(), info.data(), info.size())) {
     return false;
-                      }
+  }
 
   return write_reply({Span<const uint8_t>(out_key)});
 }
@@ -2911,7 +2912,7 @@ static bool SSKDF_HMAC(const Span<const uint8_t> args[],
                     key.size(), info.data(), info.size(), salt.data(),
                     salt.size())) {
     return false;
-                    }
+  }
 
   return write_reply({Span<const uint8_t>(out_key)});
 }
@@ -2934,7 +2935,7 @@ static bool SSHKDF(const Span<const uint8_t> args[],
                 session_id.data(), session_id.size(), type_val, out.data(),
                 out_bytes_uint)) {
     return false;
-                }
+  }
 
   return write_reply({Span<const uint8_t>(out)});
 }
@@ -2954,7 +2955,7 @@ static bool HKDF_expand(const Span<const uint8_t> args[],
   if (!::HKDF_expand(out.data(), out_bytes_uint, md, key_in.data(),
                      key_in.size(), fixed_data.data(), fixed_data.size())) {
     return false;
-                     }
+  }
 
   return write_reply({Span<const uint8_t>(out)});
 }
@@ -2974,7 +2975,7 @@ static bool KBKDF_CTR_HMAC(const Span<const uint8_t> args[],
   if (!::KBKDF_ctr_hmac(out.data(), out_bytes_uint, md, key_in.data(),
                         key_in.size(), fixed_data.data(), fixed_data.size())) {
     return false;
-                        }
+  }
 
   return write_reply({Span<const uint8_t>(out)});
 }
@@ -2999,7 +3000,7 @@ static bool ML_KEM_KEYGEN(const Span<const uint8_t> args[],
       seed_len != seed.size() ||
       !EVP_PKEY_keygen_deterministic(ctx.get(), &raw, seed.data(), &seed_len)) {
     return false;
-      }
+  }
   bssl::UniquePtr<EVP_PKEY> pkey(raw);
 
   size_t decaps_key_size = 0;
@@ -3008,7 +3009,7 @@ static bool ML_KEM_KEYGEN(const Span<const uint8_t> args[],
   if (!EVP_PKEY_get_raw_private_key(pkey.get(), nullptr, &decaps_key_size) ||
       !EVP_PKEY_get_raw_public_key(pkey.get(), nullptr, &encaps_key_size)) {
     return false;
-      }
+  }
 
   std::vector<uint8_t> decaps_key(decaps_key_size);
   std::vector<uint8_t> encaps_key(encaps_key_size);
@@ -3018,7 +3019,7 @@ static bool ML_KEM_KEYGEN(const Span<const uint8_t> args[],
       !EVP_PKEY_get_raw_public_key(pkey.get(), encaps_key.data(),
                                    &encaps_key_size)) {
     return false;
-                                   }
+  }
 
   return write_reply({Span<const uint8_t>(encaps_key.data(), encaps_key_size),
                       Span<const uint8_t>(decaps_key.data(), decaps_key_size)});
@@ -3042,7 +3043,7 @@ static bool ML_KEM_ENCAP(const Span<const uint8_t> args[],
                                           &seed_len) ||
       seed_len != m.size()) {
     return false;
-      }
+  }
 
   std::vector<uint8_t> ciphertext(ciphertext_len);
   std::vector<uint8_t> shared_secret(shared_secret_len);
@@ -3051,7 +3052,7 @@ static bool ML_KEM_ENCAP(const Span<const uint8_t> args[],
           ctx.get(), ciphertext.data(), &ciphertext_len, shared_secret.data(),
           &shared_secret_len, m.data(), &seed_len)) {
     return false;
-          }
+  }
 
   return write_reply(
       {Span<const uint8_t>(ciphertext.data(), ciphertext_len),
@@ -3072,14 +3073,14 @@ static bool ML_KEM_DECAP(const Span<const uint8_t> args[],
   if (!EVP_PKEY_decapsulate(ctx.get(), nullptr, &shared_secret_len, c.data(),
                             c.size())) {
     return false;
-                            }
+  }
 
   std::vector<uint8_t> shared_secret(shared_secret_len);
 
   if (!EVP_PKEY_decapsulate(ctx.get(), shared_secret.data(), &shared_secret_len,
                             c.data(), c.size())) {
     return false;
-                            }
+  }
 
   return write_reply(
       {Span<const uint8_t>(shared_secret.data(), shared_secret_len)});
@@ -3123,7 +3124,7 @@ static bool ED25519SigGen(const Span<const uint8_t> args[],
   if (!::ED25519_sign(signature.data(), message.data(), message.size(),
                       private_key.data())) {
     return false;
-                      }
+  }
 
   return write_reply({Span<const uint8_t>(signature)});
 }
@@ -3138,9 +3139,9 @@ static bool ED25519SigVer(const Span<const uint8_t> args[],
   if (::ED25519_verify(message.data(), message.size(), signature.data(),
                        public_key.data())) {
     reply[0] = 1;
-                       } else {
-                         ERR_clear_error();
-                       }
+  } else {
+    ERR_clear_error();
+  }
 
   return write_reply({Span<const uint8_t>(reply)});
 }
@@ -3194,8 +3195,7 @@ static bool ML_DSA_SIGGEN(const Span<const uint8_t> args[],
   const Span<const uint8_t> mu = args[2];
   const Span<const uint8_t> rnd = args[3];
   const Span<const uint8_t> context = args[4];
-  const Span<const uint8_t> extmu = args[5];
-  //const std::string extmu = args[5];
+  const std::string extmu = args[5];
 
   ml_dsa_params params;
   if (nid == NID_MLDSA44) {
@@ -3211,32 +3211,29 @@ static bool ML_DSA_SIGGEN(const Span<const uint8_t> args[],
   size_t signature_len = params.bytes;
   std::vector<uint8_t> signature(signature_len);
 
-  // Convert extmu to string for comparison
-  std::string extmu_str(reinterpret_cast<const char*>(extmu.data()), extmu.size());
-
-  // generate the signatures raw sign mode
-  if (extmu_str == "False") {
+  if (extmu == "false") {
+    // generate the signatures raw sign mode
     if (nid == NID_MLDSA44) {
       if (!ml_dsa_44_sign_internal(sk.data(), signature.data(), &signature_len,
-                                   msg.data(), msg.size(), context.data(), context.size(), rnd.data())) {
-        return false;
+                                   msg.data(), msg.size(), context, context.size(), rnd.data())) {
+         return false;
       }
     }
     else if (nid == NID_MLDSA65) {
       if (!ml_dsa_65_sign_internal(sk.data(), signature.data(), &signature_len,
-                                   msg.data(), msg.size(), context.data(), context.size(), rnd.data())) {
+                                   msg.data(), msg.size(), context, context.size(), rnd.data())) {
         return false;
       }
     }
     else if (nid == NID_MLDSA87) {
       if (!ml_dsa_87_sign_internal(sk.data(), signature.data(), &signature_len,
-                                   msg.data(), msg.size(), context.data(), context.size(), rnd.data())) {
+                                   msg.data(), msg.size(), context, context.size(), rnd.data())) {
         return false;
       }
     }
   }
-  // generate the signatures digest sign mode (externalmu)
   else {
+    // generate the signatures digest sign mode (externalmu)
     if (nid == NID_MLDSA44) {
       if (!ml_dsa_extmu_44_sign_internal(sk.data(), signature.data(), &signature_len,
                                          mu.data(), mu.size(), nullptr, 0, rnd.data())) {
@@ -3261,19 +3258,18 @@ static bool ML_DSA_SIGGEN(const Span<const uint8_t> args[],
 }
 
 template <int nid>
-static bool ML_DSA_SIGVER(const Span<const uint8_t> args[], ReplyCallback write_reply) {
+static bool ML_DSA_SIGVER(const Span<const uint8_t> args[],
+                         ReplyCallback write_reply) {
   const Span<const uint8_t> sig = args[0];
   const Span<const uint8_t> pk = args[1];
   const Span<const uint8_t> msg = args[2];
   const Span<const uint8_t> mu = args[3];
   const Span<const uint8_t> context = args[4];
-  const Span<const uint8_t> extmu = args[5];
+  const std::string extmu = args[5];
 
   uint8_t reply[1] = {0};
-  std::string extmu_str(reinterpret_cast<const char*>(extmu.data()), extmu.size());
 
-  // verify the signatures raw sign mode
-  if (extmu_str == "false") {
+  if (extmu == "false") {
     if (nid == NID_MLDSA44) {
       if (ml_dsa_44_verify_internal(pk.data(), sig.data(), sig.size(), msg.data(),
                                     msg.size(), context.data(), context.size())) {
@@ -3293,27 +3289,27 @@ static bool ML_DSA_SIGVER(const Span<const uint8_t> args[], ReplyCallback write_
       }
     }
   }
-  // verify the signatures digest sign mode (externalmu)
   else{
     if (nid == NID_MLDSA44) {
-      if (ml_dsa_extmu_44_verify_internal(pk.data(), sig.data(), sig.size(), mu.data(),
-                                          mu.size(), nullptr, 0)) {
+      if (ml_dsa_extmu_44_verify_internal(pk.data(), sig.data(), sig.size(), msg.data(),
+                                          msg.size(), nullptr, 0)) {
         reply[0] = 1;
       }
     }
     else if (nid == NID_MLDSA65) {
-      if (ml_dsa_extmu_65_verify_internal(pk.data(), sig.data(), sig.size(), mu.data(),
-                                          mu.size(), nullptr, 0)) {
+      if (ml_dsa_extmu_65_verify_internal(pk.data(), sig.data(), sig.size(), msg.data(),
+                                          msg.size(), nullptr, 0)) {
         reply[0] = 1;
       }
     }
     else if (nid == NID_MLDSA87) {
-      if (ml_dsa_extmu_87_verify_internal(pk.data(), sig.data(), sig.size(), mu.data(),
-                                          mu.size(), nullptr, 0)) {
+      if (ml_dsa_extmu_87_verify_internal(pk.data(), sig.data(), sig.size(), msg.data(),
+                                          msg.size(), nullptr, 0)) {
         reply[0] = 1;
-       }
+      }
     }
   }
+
   return write_reply({Span<const uint8_t>(reply)});
 }
 
