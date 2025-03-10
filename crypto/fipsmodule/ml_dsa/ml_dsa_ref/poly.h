@@ -45,7 +45,7 @@ void ml_dsa_poly_use_hint(ml_dsa_params *params,
 
 int ml_dsa_poly_chknorm(const ml_dsa_poly *a, int32_t B);
 
-void ml_dsa_poly_uniform(ml_dsa_poly *a,
+int ml_dsa_poly_uniform(ml_dsa_poly *a,
                          const uint8_t seed[ML_DSA_SEEDBYTES],
                          uint16_t nonce);
 

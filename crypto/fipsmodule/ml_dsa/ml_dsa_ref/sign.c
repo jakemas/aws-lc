@@ -120,6 +120,32 @@ int ml_dsa_keypair_internal(ml_dsa_params *params,
   return 0;
 }
 
+int ml_dsa_test_matrix_expand(ml_dsa_params *params, uint8_t *out_seed) {
+  uint8_t seed[ML_DSA_SEEDBYTES];
+  uint8_t rho[ML_DSA_SEEDBYTES];
+  polyvecl mat[ML_DSA_K_MAX];
+
+  while (1) {
+    if (!RAND_bytes(seed, ML_DSA_SEEDBYTES)) {
+      return -1;
+    }
+
+    KECCAK1600_CTX state;
+    SHAKE_Init(&state, SHAKE128_BLOCKSIZE);
+    SHAKE_Absorb(&state, seed, ML_DSA_SEEDBYTES);
+    SHAKE_Absorb(&state, &params->k, 1);
+    SHAKE_Absorb(&state, &params->l, 1);
+    SHAKE_Final(rho, &state, ML_DSA_SEEDBYTES);
+
+    int result = ml_dsa_polyvec_matrix_expand(params, mat, rho);
+    if (result != 0) {  // Found a rejection
+      memcpy(out_seed, seed, ML_DSA_SEEDBYTES);
+      return result;
+    }
+  }
+}
+
+
 /*************************************************
 * Name:        ml_dsa_keypair
 *

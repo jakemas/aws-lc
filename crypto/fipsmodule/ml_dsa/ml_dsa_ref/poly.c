@@ -302,7 +302,7 @@ static unsigned int ml_dsa_rej_uniform(int32_t *a,
 *              - uint16_t nonce: 2-byte nonce
 **************************************************/
 #define POLY_UNIFORM_NBLOCKS ((768 + SHAKE128_BLOCKSIZE - 1)/ SHAKE128_BLOCKSIZE)
-void ml_dsa_poly_uniform(ml_dsa_poly *a,
+int ml_dsa_poly_uniform(ml_dsa_poly *a,
                   const uint8_t seed[ML_DSA_SEEDBYTES],
                   uint16_t nonce)
 {
@@ -322,6 +322,10 @@ void ml_dsa_poly_uniform(ml_dsa_poly *a,
 
   ctr = ml_dsa_rej_uniform(a->coeffs, ML_DSA_N, buf, buflen);
 
+  if (ctr < ML_DSA_N) {
+    return 0;
+  }
+
   while(ctr < ML_DSA_N) {
     off = buflen % 3;
     for(i = 0; i < off; ++i)
@@ -334,6 +338,7 @@ void ml_dsa_poly_uniform(ml_dsa_poly *a,
   /* FIPS 204. Section 3.6.3 Destruction of intermediate values. */
   OPENSSL_cleanse(buf, sizeof(buf));
   OPENSSL_cleanse(&state, sizeof(state));
+  return 1;
 }
 
 /*************************************************

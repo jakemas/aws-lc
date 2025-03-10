@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include "params.h"
 
+int ml_dsa_test_matrix_expand(ml_dsa_params *params, uint8_t *out_seed);
+
 int ml_dsa_keypair(ml_dsa_params *params,
                    uint8_t *pk,
                    uint8_t *sk,

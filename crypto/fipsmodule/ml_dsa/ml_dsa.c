@@ -23,6 +23,12 @@
 // those can be conditionally (or based on compile-time flags) called here,
 // depending on platform support.
 
+int ml_dsa_44_seed_test(uint8_t *seed) {
+  ml_dsa_params params;
+  ml_dsa_44_params_init(&params);
+  return ml_dsa_test_matrix_expand(&params, seed);
+}
+
 int ml_dsa_44_keypair_internal(uint8_t *public_key   /* OUT */,
                                uint8_t *private_key  /* OUT */,
                                const uint8_t *seed   /* IN */) {

@@ -103,7 +103,7 @@ void ml_dsa_polyveck_pack_w1(ml_dsa_params *params,
                              uint8_t *r,
                              const polyveck *w1);
 
-void ml_dsa_polyvec_matrix_expand(ml_dsa_params *params,
+int ml_dsa_polyvec_matrix_expand(ml_dsa_params *params,
                                   polyvecl *mat,
                                   const uint8_t rho[ML_DSA_SEEDBYTES]);
 

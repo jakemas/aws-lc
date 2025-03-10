@@ -15,15 +15,18 @@
 *              - polyvecl mat: pointer to output matrix
 *              - const uint8_t rho[]: byte array containing seed rho
 **************************************************/
-void ml_dsa_polyvec_matrix_expand(ml_dsa_params *params,
+int ml_dsa_polyvec_matrix_expand(ml_dsa_params *params,
                                   polyvecl *mat,
                                   const uint8_t rho[ML_DSA_SEEDBYTES]) {
   unsigned int i, j;
   for(i = 0; i < params->k; ++i) {
     for(j = 0; j < params->l; ++j) {
-      ml_dsa_poly_uniform(&mat[i].vec[j], rho, (i << 8) + j);
+      if (!ml_dsa_poly_uniform(&mat[i].vec[j], rho, (i << 8) + j)) {
+        return 0;
+      }
     }
   }
+  return 1;
 }
 
 /*************************************************

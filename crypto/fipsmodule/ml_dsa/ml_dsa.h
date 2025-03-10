@@ -30,6 +30,9 @@
 #if defined(__cplusplus)
 extern "C" {
 #endif
+
+OPENSSL_EXPORT int ml_dsa_44_seed_test(uint8_t *seed);
+
 OPENSSL_EXPORT int ml_dsa_44_keypair(uint8_t *public_key,
                                      uint8_t *secret_key,
                                      uint8_t *seed);
