@@ -138,7 +138,7 @@ int ml_dsa_test_matrix_expand(ml_dsa_params *params, uint8_t *out_seed) {
     SHAKE_Final(rho, &state, ML_DSA_SEEDBYTES);
 
     int result = ml_dsa_polyvec_matrix_expand(params, mat, rho);
-    if (result != 0) {  // Found a rejection
+    if (result == 0) {  // Found a rejection
       memcpy(out_seed, seed, ML_DSA_SEEDBYTES);
       return result;
     }
