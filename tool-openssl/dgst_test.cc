@@ -3,6 +3,8 @@
 
 #include <gtest/gtest.h>
 #include <openssl/pem.h>
+#include <openssl/ec.h>
+#include <openssl/evp.h>
 #include "../crypto/test/test_util.h"
 #include "test_util.h"
 
@@ -181,6 +183,141 @@ TEST_F(DgstComparisonTest, MD5_files) {
 }
 
 // Test against OpenSSL output with stdin.
+class DgstVerifyTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    awslc_executable_path = getenv("AWSLC_TOOL_PATH");
+    if (awslc_executable_path == nullptr) {
+      GTEST_SKIP() << "Skipping test: AWSLC_TOOL_PATH environment variable is not set";
+    }
+
+    // Create temporary paths for test files
+    ASSERT_GT(createTempFILEpath(pubkey_path), 0u);
+    ASSERT_GT(createTempFILEpath(signature_path), 0u);
+    ASSERT_GT(createTempFILEpath(invalid_signature_path), 0u);
+    ASSERT_GT(createTempFILEpath(message_path), 0u);
+    ASSERT_GT(createTempFILEpath(out_path), 0u);
+    ASSERT_GT(createTempFILEpath(out_path_awslc), 0u);
+
+    // Generate ECDSA P-256 key pair
+    bssl::UniquePtr<EC_KEY> ec_key(EC_KEY_new_by_curve_name(NID_X9_62_prime256v1));
+    ASSERT_TRUE(ec_key);
+    ASSERT_TRUE(EC_KEY_generate_key(ec_key.get()));
+
+    pkey.reset(EVP_PKEY_new());
+    ASSERT_TRUE(EVP_PKEY_assign_EC_KEY(pkey.get(), ec_key.release()));
+
+    // Export public key in DER format (default)
+    bssl::UniquePtr<BIO> bio(BIO_new_file(pubkey_path, "w"));
+    ASSERT_TRUE(bio);
+    ASSERT_TRUE(i2d_PUBKEY_bio(bio.get(), pkey.get()));
+
+    // Also export public key in PEM format
+    ASSERT_GT(createTempFILEpath(pubkey_pem_path), 0u);
+    bssl::UniquePtr<BIO> bio_pem(BIO_new_file(pubkey_pem_path, "w"));
+    ASSERT_TRUE(bio_pem);
+    ASSERT_TRUE(PEM_write_bio_PUBKEY(bio_pem.get(), pkey.get()));
+
+    // Create test message
+    std::string test_message = "test message for signature verification";
+    std::ofstream msg_file(message_path);
+    msg_file << test_message;
+    msg_file.close();
+
+    // Sign the test message
+    bssl::ScopedEVP_MD_CTX md_ctx;
+    ASSERT_TRUE(EVP_DigestSignInit(md_ctx.get(), nullptr, EVP_sha256(), nullptr, pkey.get()));
+    ASSERT_TRUE(EVP_DigestSignUpdate(md_ctx.get(), test_message.data(), test_message.size()));
+
+    size_t sig_len;
+    ASSERT_TRUE(EVP_DigestSignFinal(md_ctx.get(), nullptr, &sig_len));
+    std::vector<uint8_t> sig(sig_len);
+    ASSERT_TRUE(EVP_DigestSignFinal(md_ctx.get(), sig.data(), &sig_len));
+
+    // Write signature to file
+    std::ofstream sig_file(signature_path, std::ios::binary);
+    sig_file.write(reinterpret_cast<const char*>(sig.data()), sig_len);
+    sig_file.close();
+
+    // Create invalid signature by modifying a byte
+    sig[0] ^= 0x42;
+    std::ofstream invalid_sig_file(invalid_signature_path, std::ios::binary);
+    invalid_sig_file.write(reinterpret_cast<const char*>(sig.data()), sig_len);
+    invalid_sig_file.close();
+  }
+
+  void TearDown() override {
+    if (awslc_executable_path != nullptr) {
+      RemoveFile(pubkey_path);
+      RemoveFile(pubkey_pem_path);
+      RemoveFile(signature_path);
+      RemoveFile(invalid_signature_path);
+      RemoveFile(message_path);
+    }
+  }
+
+  char pubkey_path[PATH_MAX];      // DER format (default)
+  char pubkey_pem_path[PATH_MAX];  // PEM format
+  char signature_path[PATH_MAX];
+  char invalid_signature_path[PATH_MAX];
+  char message_path[PATH_MAX];
+  char out_path[PATH_MAX];
+  char out_path_awslc[PATH_MAX];
+  const char *awslc_executable_path;
+  bssl::UniquePtr<EVP_PKEY> pkey;
+  std::string awslc_output_str;
+  std::string openssl_output_str;
+};
+
+TEST_F(DgstVerifyTest, VerifyValidSignature) {
+  // Test verification with valid signature
+  std::string verify_command = "cat " + std::string(message_path) + " | " +
+                              std::string(awslc_executable_path) +
+                              " dgst -verify " + std::string(pubkey_path) +
+                              " -signature " + std::string(signature_path) +
+                              " > " + std::string(out_path);
+
+  // Create an empty file for comparison
+  std::ofstream empty_file(out_path_awslc);
+  empty_file << "Verified OK\n";
+  empty_file.close();
+
+  RunCommandsAndCompareOutput(verify_command, "", out_path, out_path_awslc,
+                            awslc_output_str, openssl_output_str);
+}
+
+TEST_F(DgstVerifyTest, VerifyValidSignatureWithDER) {
+  // Test verification with valid signature using DER format key
+  std::string verify_command = "cat " + std::string(message_path) + " | " +
+                              std::string(awslc_executable_path) +
+                              " dgst -verify " + std::string(pubkey_path) +
+                              " -keyform DER" +
+                              " -signature " + std::string(signature_path) +
+                              " > " + std::string(out_path);
+
+  // Create an empty file for comparison
+  std::ofstream empty_file(out_path_awslc);
+  empty_file << "Verified OK\n";
+  empty_file.close();
+
+  RunCommandsAndCompareOutput(verify_command, "", out_path, out_path_awslc,
+                            awslc_output_str, openssl_output_str);
+}
+
+TEST_F(DgstVerifyTest, VerifyInvalidSignature) {
+  // Test verification with invalid signature
+  std::string verify_command = "cat " + std::string(message_path) + " | " +
+                              std::string(awslc_executable_path) +
+                              " dgst -verify " + std::string(pubkey_path) +
+                              " -signature " + std::string(invalid_signature_path);
+
+  // For invalid signatures, we expect the command to fail with exit code 1
+  std::string output;
+  int result = RunCommand(verify_command, &output);
+  EXPECT_NE(0, result);  // Non-zero exit code indicates failure
+  EXPECT_TRUE(output.find("Verification Failure") != std::string::npos);
+}
+
 TEST_F(DgstComparisonTest, MD5_stdin) {
   std::string tool_command = "echo hash_this_string | " +
                              std::string(awslc_executable_path) + " md5 > " +

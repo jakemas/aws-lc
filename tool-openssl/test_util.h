@@ -12,7 +12,26 @@
 #include <string>
 #include <iostream>
 #include <cctype>
+#include <cstdio>
 
+// Execute a command and capture its output, used for testing command-line tools
+// that may return non-zero exit codes
+inline int RunCommand(const std::string &command, std::string *output) {
+  // Redirect stderr to stdout to capture both
+  std::string cmd = command + " 2>&1";
+  FILE *pipe = popen(cmd.c_str(), "r");
+  if (!pipe) {
+    return -1;
+  }
+
+  char buffer[128];
+  output->clear();
+  while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+    *output += buffer;
+  }
+
+  return pclose(pipe);
+}
 
 // Helper function to trim whitespace from both ends of a string to test comparison output
 static inline std::string &trim(std::string &s) {
