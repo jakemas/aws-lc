@@ -900,6 +900,26 @@ TEST_F(DgstComparisonTest, InvalidXoflen) {
   EXPECT_NE(0, result);  // Non-zero exit code indicates failure
   EXPECT_TRUE(output.find("XOF output length must be greater than 0") != std::string::npos);
 
+  // Test with negative -xoflen value
+  command = std::string(awslc_executable_path) +
+            " dgst -shake128 -xoflen -10 " + input_file;
+
+  output.clear();
+  result = RunCommand(command, &output);
+  EXPECT_NE(0, result);  // Non-zero exit code indicates failure
+  EXPECT_TRUE(output.find("Invalid XOF output length") != std::string::npos ||
+              output.find("XOF output length must be greater than 0") != std::string::npos);
+
+  // Test with -xoflen specified but no value
+  command = std::string(awslc_executable_path) +
+            " dgst -shake128 -xoflen " + input_file;
+
+  output.clear();
+  result = RunCommand(command, &output);
+  EXPECT_NE(0, result);  // Non-zero exit code indicates failure
+  EXPECT_TRUE(output.find("Option -xoflen needs a value") != std::string::npos ||
+              output.find("Invalid XOF output length") != std::string::npos);
+
   RemoveFile(input_file.c_str());
 }
 
