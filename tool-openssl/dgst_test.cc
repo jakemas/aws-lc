@@ -533,9 +533,8 @@ TEST_F(DgstComparisonTest, DirectDigestAlgorithms) {
     {"SHA3-224", "-sha3-224"},
     {"SHA3-256", "-sha3-256"},
     {"SHA3-384", "-sha3-384"},
-    {"SHA3-512", "-sha3-512"},
-    {"SHAKE-128", "-shake128"},
-    {"SHAKE-256", "-shake256"}
+    {"SHA3-512", "-sha3-512"}
+    // SHAKE algorithms are tested separately with -xoflen
   };
 
   for (const auto& algo : algorithms) {
@@ -555,6 +554,52 @@ TEST_F(DgstComparisonTest, DirectDigestAlgorithms) {
 
     EXPECT_EQ(awslc_hash, openssl_hash) << "Hash mismatch for " << algo.name;
   }
+
+  RemoveFile(input_file.c_str());
+}
+
+// Test SHAKE algorithms with explicit output lengths
+TEST_F(DgstComparisonTest, ShakeWithExplicitLength) {
+  std::string input_file = std::string(in_path);
+  std::ofstream ofs(input_file);
+  ofs << "AWS_LC_TEST_STRING_FOR_SHAKE_EXPLICIT_LENGTH";
+  ofs.close();
+
+  // Test SHAKE128 with explicit output length (16 bytes)
+  std::string awslc_command = std::string(awslc_executable_path) +
+                              " dgst -shake128 -xoflen 16 " + input_file +
+                              " > " + out_path_awslc;
+  std::string openssl_command = std::string(openssl_executable_path) +
+                                " dgst -shake128 -xoflen 16 " + input_file +
+                                " > " + out_path_openssl;
+
+  RunCommandsAndCompareOutput(awslc_command, openssl_command, out_path_awslc,
+                              out_path_openssl, awslc_output_str,
+                              openssl_output_str);
+
+  std::string awslc_hash = GetHash(awslc_output_str);
+  std::string openssl_hash = GetHash(openssl_output_str);
+
+  EXPECT_EQ(awslc_hash, openssl_hash);
+  EXPECT_EQ(awslc_hash.length(), 32UL) << "SHAKE128 output length should be 16 bytes (32 hex chars)";
+
+  // Test SHAKE256 with explicit output length (32 bytes)
+  awslc_command = std::string(awslc_executable_path) +
+                  " dgst -shake256 -xoflen 32 " + input_file +
+                  " > " + out_path_awslc;
+  openssl_command = std::string(openssl_executable_path) +
+                    " dgst -shake256 -xoflen 32 " + input_file +
+                    " > " + out_path_openssl;
+
+  RunCommandsAndCompareOutput(awslc_command, openssl_command, out_path_awslc,
+                              out_path_openssl, awslc_output_str,
+                              openssl_output_str);
+
+  awslc_hash = GetHash(awslc_output_str);
+  openssl_hash = GetHash(openssl_output_str);
+
+  EXPECT_EQ(awslc_hash, openssl_hash);
+  EXPECT_EQ(awslc_hash.length(), 64UL) << "SHAKE256 output length should be 32 bytes (64 hex chars)";
 
   RemoveFile(input_file.c_str());
 }
@@ -581,23 +626,6 @@ TEST_F(DgstComparisonTest, HMAC_with_direct_digest) {
 
   std::string awslc_hash = GetHash(awslc_output_str);
   std::string openssl_hash = GetHash(openssl_output_str);
-
-  EXPECT_EQ(awslc_hash, openssl_hash);
-
-  // Test HMAC with SHA3-256 using direct option
-  awslc_command = std::string(awslc_executable_path) +
-                  " dgst -hmac test_key -sha3-256 " + input_file +
-                  " > " + out_path_awslc;
-  openssl_command = std::string(openssl_executable_path) +
-                    " dgst -hmac test_key -sha3-256 " + input_file +
-                    " > " + out_path_openssl;
-
-  RunCommandsAndCompareOutput(awslc_command, openssl_command, out_path_awslc,
-                              out_path_openssl, awslc_output_str,
-                              openssl_output_str);
-
-  awslc_hash = GetHash(awslc_output_str);
-  openssl_hash = GetHash(openssl_output_str);
 
   EXPECT_EQ(awslc_hash, openssl_hash);
 

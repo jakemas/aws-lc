@@ -209,6 +209,14 @@ static bool verify_signature(EVP_PKEY *pkey, const EVP_MD *digest,
 
 static bool dgst_file_op(const std::string &filename, const int fd,
                          const EVP_MD *digest, size_t xof_len = 0) {
+  // Set default XOF lengths if not specified
+  if (xof_len == 0) {
+    if (EVP_MD_type(digest) == NID_shake128) {
+      xof_len = 16;  // Default for SHAKE128 is 16 bytes (128 bits)
+    } else if (EVP_MD_type(digest) == NID_shake256) {
+      xof_len = 32;  // Default for SHAKE256 is 32 bytes (256 bits)
+    }
+  }
   static const size_t kBufSize = 8192;
   std::unique_ptr<uint8_t[]> buf(new uint8_t[kBufSize]);
 
@@ -277,52 +285,119 @@ static bool hmac_file_op(const std::string &filename, const int fd,
   static const size_t kBufSize = 8192;
   std::unique_ptr<uint8_t[]> buf(new uint8_t[kBufSize]);
 
-  bssl::ScopedHMAC_CTX ctx;
-  if (!HMAC_Init_ex(ctx.get(), hmac_key, hmac_key_len, digest, nullptr)) {
-    fprintf(stderr, "Failed to initialize HMAC_Init_ex.\n");
-    return false;
-  }
+  // For SHA3 algorithms, use EVP_DigestSign* functions instead of HMAC_*
+  int md_type = EVP_MD_type(digest);
+  bool use_evp = (md_type == NID_sha3_224 || md_type == NID_sha3_256 ||
+                 md_type == NID_sha3_384 || md_type == NID_sha3_512);
 
-  // Update |buf| from file continuously.
-  for (;;) {
-    size_t n;
-    if (!ReadFromFD(fd, &n, buf.get(), kBufSize)) {
-      fprintf(stderr, "Failed to read from %s: %s\n", filename.c_str(),
-              strerror(errno));
+  if (use_evp) {
+    // Use EVP_DigestSign* for SHA3 algorithms
+    bssl::ScopedEVP_MD_CTX ctx;
+    bssl::UniquePtr<EVP_PKEY> pkey(EVP_PKEY_new_mac_key(EVP_PKEY_HMAC, nullptr,
+                                                      (const uint8_t *)hmac_key, hmac_key_len));
+    if (!pkey) {
+      fprintf(stderr, "Failed to create HMAC key.\n");
       return false;
     }
 
-    if (n == 0) {
-      break;
-    }
-
-    if (!HMAC_Update(ctx.get(), buf.get(), n)) {
-      fprintf(stderr, "Failed to update HMAC.\n");
+    if (!EVP_DigestSignInit(ctx.get(), nullptr, digest, nullptr, pkey.get())) {
+      fprintf(stderr, "Failed to initialize EVP_DigestSignInit.\n");
       return false;
     }
-  }
 
-  const unsigned expected_mac_len = EVP_MD_size(digest);
-  std::unique_ptr<uint8_t[]> mac(new uint8_t[expected_mac_len]);
-  unsigned mac_len;
-  if (!HMAC_Final(ctx.get(), mac.get(), &mac_len)) {
-    fprintf(stderr, "Failed to finalize HMAC.\n");
-    return false;
-  }
+    // Update |buf| from file continuously.
+    for (;;) {
+      size_t n;
+      if (!ReadFromFD(fd, &n, buf.get(), kBufSize)) {
+        fprintf(stderr, "Failed to read from %s: %s\n", filename.c_str(),
+                strerror(errno));
+        return false;
+      }
 
-  // Print HMAC output. OpenSSL outputs the digest name with files, but not
-  // with stdin.
-  if (fd != 0) {
-    fprintf(stdout, "HMAC-%s(%s)= ", EVP_MD_get0_name(digest),
-            filename.c_str());
+      if (n == 0) {
+        break;
+      }
+
+      if (!EVP_DigestSignUpdate(ctx.get(), buf.get(), n)) {
+        fprintf(stderr, "Failed to update digest.\n");
+        return false;
+      }
+    }
+
+    // Get the MAC length
+    size_t mac_len;
+    if (!EVP_DigestSignFinal(ctx.get(), nullptr, &mac_len)) {
+      fprintf(stderr, "Failed to get MAC length.\n");
+      return false;
+    }
+
+    std::unique_ptr<uint8_t[]> mac(new uint8_t[mac_len]);
+    if (!EVP_DigestSignFinal(ctx.get(), mac.get(), &mac_len)) {
+      fprintf(stderr, "Failed to finalize MAC.\n");
+      return false;
+    }
+
+    // Print HMAC output
+    if (fd != 0) {
+      fprintf(stdout, "HMAC-%s(%s)= ", EVP_MD_get0_name(digest),
+              filename.c_str());
+    } else {
+      fprintf(stdout, "(%s)= ", filename.c_str());
+    }
+    for (size_t i = 0; i < mac_len; i++) {
+      fprintf(stdout, "%02x", mac[i]);
+    }
+    fprintf(stdout, "\n");
+    return true;
   } else {
-    fprintf(stdout, "(%s)= ", filename.c_str());
-  };
-  for (size_t i = 0; i < expected_mac_len; i++) {
-    fprintf(stdout, "%02x", mac[i]);
+    // Use HMAC_* for other algorithms
+    bssl::ScopedHMAC_CTX ctx;
+    if (!HMAC_Init_ex(ctx.get(), hmac_key, hmac_key_len, digest, nullptr)) {
+      fprintf(stderr, "Failed to initialize HMAC_Init_ex.\n");
+      return false;
+    }
+
+    // Update |buf| from file continuously.
+    for (;;) {
+      size_t n;
+      if (!ReadFromFD(fd, &n, buf.get(), kBufSize)) {
+        fprintf(stderr, "Failed to read from %s: %s\n", filename.c_str(),
+                strerror(errno));
+        return false;
+      }
+
+      if (n == 0) {
+        break;
+      }
+
+      if (!HMAC_Update(ctx.get(), buf.get(), n)) {
+        fprintf(stderr, "Failed to update HMAC.\n");
+        return false;
+      }
+    }
+
+    const unsigned expected_mac_len = EVP_MD_size(digest);
+    std::unique_ptr<uint8_t[]> mac(new uint8_t[expected_mac_len]);
+    unsigned mac_len;
+    if (!HMAC_Final(ctx.get(), mac.get(), &mac_len)) {
+      fprintf(stderr, "Failed to finalize HMAC.\n");
+      return false;
+    }
+
+    // Print HMAC output. OpenSSL outputs the digest name with files, but not
+    // with stdin.
+    if (fd != 0) {
+      fprintf(stdout, "HMAC-%s(%s)= ", EVP_MD_get0_name(digest),
+              filename.c_str());
+    } else {
+      fprintf(stdout, "(%s)= ", filename.c_str());
+    };
+    for (size_t i = 0; i < expected_mac_len; i++) {
+      fprintf(stdout, "%02x", mac[i]);
+    }
+    fprintf(stdout, "\n");
+    return true;
   }
-  fprintf(stdout, "\n");
-  return true;
 }
 
 static bool dgst_tool_op(const args_list_t &args, const EVP_MD *digest) {
