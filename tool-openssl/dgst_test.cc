@@ -198,6 +198,9 @@ class DgstVerifyTest : public ::testing::Test {
     ASSERT_GT(createTempFILEpath(message_path), 0u);
     ASSERT_GT(createTempFILEpath(out_path), 0u);
     ASSERT_GT(createTempFILEpath(out_path_awslc), 0u);
+    ASSERT_GT(createTempFILEpath(malformed_key_path), 0u);
+    ASSERT_GT(createTempFILEpath(empty_key_path), 0u);
+    ASSERT_GT(createTempFILEpath(corrupted_pem_path), 0u);
 
     // Generate ECDSA P-256 key pair
     bssl::UniquePtr<EC_KEY> ec_key(EC_KEY_new_by_curve_name(NID_X9_62_prime256v1));
@@ -244,6 +247,22 @@ class DgstVerifyTest : public ::testing::Test {
     std::ofstream invalid_sig_file(invalid_signature_path, std::ios::binary);
     invalid_sig_file.write(reinterpret_cast<const char*>(sig.data()), sig_len);
     invalid_sig_file.close();
+
+    // Create malformed key file
+    std::ofstream malformed_key(malformed_key_path);
+    malformed_key << "This is not a valid key file";
+    malformed_key.close();
+
+    // Create empty key file
+    std::ofstream empty_key(empty_key_path);
+    empty_key.close();
+
+    // Create corrupted PEM file
+    std::ofstream corrupted_pem(corrupted_pem_path);
+    corrupted_pem << "-----BEGIN PUBLIC KEY-----\n";
+    corrupted_pem << "Not a valid base64 content!!!\n";
+    corrupted_pem << "-----END PUBLIC KEY-----\n";
+    corrupted_pem.close();
   }
 
   void TearDown() override {
@@ -253,6 +272,9 @@ class DgstVerifyTest : public ::testing::Test {
       RemoveFile(signature_path);
       RemoveFile(invalid_signature_path);
       RemoveFile(message_path);
+      RemoveFile(malformed_key_path);
+      RemoveFile(empty_key_path);
+      RemoveFile(corrupted_pem_path);
     }
   }
 
@@ -263,6 +285,9 @@ class DgstVerifyTest : public ::testing::Test {
   char message_path[PATH_MAX];
   char out_path[PATH_MAX];
   char out_path_awslc[PATH_MAX];
+  char malformed_key_path[PATH_MAX];
+  char empty_key_path[PATH_MAX];
+  char corrupted_pem_path[PATH_MAX];
   const char *awslc_executable_path;
   bssl::UniquePtr<EVP_PKEY> pkey;
   std::string awslc_output_str;
@@ -304,6 +329,24 @@ TEST_F(DgstVerifyTest, VerifyValidSignatureWithDER) {
                             awslc_output_str, openssl_output_str);
 }
 
+TEST_F(DgstVerifyTest, VerifyValidSignatureWithPEM) {
+  // Test verification with valid signature using PEM format key
+  std::string verify_command = "cat " + std::string(message_path) + " | " +
+                              std::string(awslc_executable_path) +
+                              " dgst -verify " + std::string(pubkey_pem_path) +
+                              " -keyform PEM" +
+                              " -signature " + std::string(signature_path) +
+                              " > " + std::string(out_path);
+
+  // Create an empty file for comparison
+  std::ofstream empty_file(out_path_awslc);
+  empty_file << "Verified OK\n";
+  empty_file.close();
+
+  RunCommandsAndCompareOutput(verify_command, "", out_path, out_path_awslc,
+                            awslc_output_str, openssl_output_str);
+}
+
 TEST_F(DgstVerifyTest, VerifyInvalidSignature) {
   // Test verification with invalid signature
   std::string verify_command = "cat " + std::string(message_path) + " | " +
@@ -316,6 +359,86 @@ TEST_F(DgstVerifyTest, VerifyInvalidSignature) {
   int result = RunCommand(verify_command, &output);
   EXPECT_NE(0, result);  // Non-zero exit code indicates failure
   EXPECT_TRUE(output.find("Verification Failure") != std::string::npos);
+}
+
+TEST_F(DgstVerifyTest, VerifyWithMalformedKey) {
+  // Test verification with malformed key file
+  std::string verify_command = "cat " + std::string(message_path) + " | " +
+                              std::string(awslc_executable_path) +
+                              " dgst -verify " + std::string(malformed_key_path) +
+                              " -signature " + std::string(signature_path);
+
+  std::string output;
+  int result = RunCommand(verify_command, &output);
+  EXPECT_NE(0, result);
+  EXPECT_TRUE(output.find("Failed to read public key") != std::string::npos);
+}
+
+TEST_F(DgstVerifyTest, VerifyWithEmptyKey) {
+  // Test verification with empty key file
+  std::string verify_command = "cat " + std::string(message_path) + " | " +
+                              std::string(awslc_executable_path) +
+                              " dgst -verify " + std::string(empty_key_path) +
+                              " -signature " + std::string(signature_path);
+
+  std::string output;
+  int result = RunCommand(verify_command, &output);
+  EXPECT_NE(0, result);
+  EXPECT_TRUE(output.find("Failed to read public key") != std::string::npos);
+}
+
+TEST_F(DgstVerifyTest, VerifyWithCorruptedPEM) {
+  // Test verification with corrupted PEM file
+  std::string verify_command = "cat " + std::string(message_path) + " | " +
+                              std::string(awslc_executable_path) +
+                              " dgst -verify " + std::string(corrupted_pem_path) +
+                              " -keyform PEM" +
+                              " -signature " + std::string(signature_path);
+
+  std::string output;
+  int result = RunCommand(verify_command, &output);
+  EXPECT_NE(0, result);
+  EXPECT_TRUE(output.find("Failed to read public key") != std::string::npos);
+}
+
+TEST_F(DgstVerifyTest, VerifyWithWrongKeyFormat) {
+  // Test verification with wrong key format specified (PEM for DER file)
+  std::string verify_command = "cat " + std::string(message_path) + " | " +
+                              std::string(awslc_executable_path) +
+                              " dgst -verify " + std::string(pubkey_path) +
+                              " -keyform PEM" +  // Wrong format for DER file
+                              " -signature " + std::string(signature_path);
+
+  std::string output;
+  int result = RunCommand(verify_command, &output);
+  EXPECT_NE(0, result);
+  EXPECT_TRUE(output.find("Failed to read public key") != std::string::npos);
+}
+
+TEST_F(DgstVerifyTest, VerifyWithMissingKeyFile) {
+  // Test verification with non-existent key file
+  std::string verify_command = "cat " + std::string(message_path) + " | " +
+                              std::string(awslc_executable_path) +
+                              " dgst -verify nonexistent.key" +
+                              " -signature " + std::string(signature_path);
+
+  std::string output;
+  int result = RunCommand(verify_command, &output);
+  EXPECT_NE(0, result);
+  EXPECT_TRUE(output.find("Failed to open public key file") != std::string::npos);
+}
+
+TEST_F(DgstVerifyTest, VerifyWithMissingSignatureFile) {
+  // Test verification with non-existent signature file
+  std::string verify_command = "cat " + std::string(message_path) + " | " +
+                              std::string(awslc_executable_path) +
+                              " dgst -verify " + std::string(pubkey_path) +
+                              " -signature nonexistent.sig";
+
+  std::string output;
+  int result = RunCommand(verify_command, &output);
+  EXPECT_NE(0, result);
+  EXPECT_TRUE(output.find("Failed to open signature file") != std::string::npos);
 }
 
 TEST_F(DgstComparisonTest, MD5_stdin) {
