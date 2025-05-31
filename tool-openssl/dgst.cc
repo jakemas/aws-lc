@@ -292,78 +292,17 @@ static bool hmac_file_op(const std::string &filename, const int fd,
   static const size_t kBufSize = 8192;
   std::unique_ptr<uint8_t[]> buf(new uint8_t[kBufSize]);
 
-  // For SHA3 algorithms, use EVP_DigestSign* functions instead of HMAC_*
+  // Use HMAC_* for all algorithms
+  // Note: SHA-3 algorithms are not currently supported for HMAC
   int md_type = EVP_MD_type(digest);
-  bool use_evp = (md_type == NID_sha3_224 || md_type == NID_sha3_256 ||
-                 md_type == NID_sha3_384 || md_type == NID_sha3_512);
+  if (md_type == NID_sha3_224 || md_type == NID_sha3_256 ||
+      md_type == NID_sha3_384 || md_type == NID_sha3_512 ||
+      md_type == NID_shake128 || md_type == NID_shake256) {
+    fprintf(stderr, "HMAC is not supported with SHA-3 or SHAKE algorithms.\n");
+    return false;
+  }
 
-  if (use_evp) {
-    // Use EVP_DigestSign* for SHA3 algorithms
-    bssl::ScopedEVP_MD_CTX ctx;
-    bssl::UniquePtr<EVP_PKEY> pkey(EVP_PKEY_new_mac_key(EVP_PKEY_HMAC, nullptr,
-                                                      (const uint8_t *)hmac_key, hmac_key_len));
-    if (!pkey) {
-      fprintf(stderr, "Failed to create HMAC key.\n");
-      return false;
-    }
-
-    if (!EVP_DigestSignInit(ctx.get(), nullptr, digest, nullptr, pkey.get())) {
-      fprintf(stderr, "Failed to initialize EVP_DigestSignInit.\n");
-      return false;
-    }
-
-    // Update |buf| from file continuously.
-    for (;;) {
-      size_t n;
-      if (!ReadFromFD(fd, &n, buf.get(), kBufSize)) {
-        fprintf(stderr, "Failed to read from %s: %s\n", filename.c_str(),
-                strerror(errno));
-        return false;
-      }
-
-      if (n == 0) {
-        break;
-      }
-
-      if (!EVP_DigestSignUpdate(ctx.get(), buf.get(), n)) {
-        fprintf(stderr, "Failed to update digest.\n");
-        return false;
-      }
-    }
-
-    // Get the MAC length
-    size_t mac_len;
-    if (!EVP_DigestSignFinal(ctx.get(), nullptr, &mac_len)) {
-      fprintf(stderr, "Failed to get MAC length.\n");
-      return false;
-    }
-
-    std::unique_ptr<uint8_t[]> mac(new uint8_t[mac_len]);
-    if (!EVP_DigestSignFinal(ctx.get(), mac.get(), &mac_len)) {
-      fprintf(stderr, "Failed to finalize MAC.\n");
-      return false;
-    }
-
-    // Handle binary output
-    if (binary_output) {
-      // Write binary MAC directly to stdout
-      fwrite(mac.get(), 1, mac_len, stdout);
-    } else {
-      // Print HMAC output in hex format
-      if (fd != 0) {
-        fprintf(stdout, "HMAC-%s(%s)= ", EVP_MD_get0_name(digest),
-                filename.c_str());
-      } else {
-        fprintf(stdout, "(%s)= ", filename.c_str());
-      }
-      for (size_t i = 0; i < mac_len; i++) {
-        fprintf(stdout, "%02x", mac[i]);
-      }
-      fprintf(stdout, "\n");
-    }
-    return true;
-  } else {
-    // Use HMAC_* for other algorithms
+  // Use HMAC_* for supported algorithms
     bssl::ScopedHMAC_CTX ctx;
     if (!HMAC_Init_ex(ctx.get(), hmac_key, hmac_key_len, digest, nullptr)) {
       fprintf(stderr, "Failed to initialize HMAC_Init_ex.\n");
@@ -415,7 +354,6 @@ static bool hmac_file_op(const std::string &filename, const int fd,
       fprintf(stdout, "\n");
     }
     return true;
-  }
 }
 
 static bool dgst_tool_op(const args_list_t &args, const EVP_MD *digest) {
