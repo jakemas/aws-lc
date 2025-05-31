@@ -36,6 +36,50 @@ class ScopedEVP_PKEY_CTX {
 
 }  // namespace bssl
 
+// Helper function to get EVP_MD from digest name
+static const EVP_MD* GetDigestFromName(const std::string &digest_name) {
+  if (digest_name == "sha1") {
+    return EVP_sha1();
+  } else if (digest_name == "sha224") {
+    return EVP_sha224();
+  } else if (digest_name == "sha256") {
+    return EVP_sha256();
+  } else if (digest_name == "sha384") {
+    return EVP_sha384();
+  } else if (digest_name == "sha512") {
+    return EVP_sha512();
+  } else if (digest_name == "sha3-224") {
+    return EVP_sha3_224();
+  } else if (digest_name == "sha3-256") {
+    return EVP_sha3_256();
+  } else if (digest_name == "sha3-384") {
+    return EVP_sha3_384();
+  } else if (digest_name == "sha3-512") {
+    return EVP_sha3_512();
+  } else if (digest_name == "shake128") {
+    return EVP_shake128();
+  } else if (digest_name == "shake256") {
+    return EVP_shake256();
+  }
+  return nullptr;
+}
+
+// Get list of supported digest algorithms
+static void PrintSupportedDigests() {
+  fprintf(stdout, "Supported digests:\n");
+  fprintf(stdout, "  sha1\n");
+  fprintf(stdout, "  sha224\n");
+  fprintf(stdout, "  sha256\n");
+  fprintf(stdout, "  sha384\n");
+  fprintf(stdout, "  sha512\n");
+  fprintf(stdout, "  sha3-224\n");
+  fprintf(stdout, "  sha3-256\n");
+  fprintf(stdout, "  sha3-384\n");
+  fprintf(stdout, "  sha3-512\n");
+  fprintf(stdout, "  shake128\n");
+  fprintf(stdout, "  shake256\n");
+}
+
 // MD5 command currently only supports stdin
 static const argument_t kArguments[] = {
     {"-help", kBooleanArgument, "Display option summary"},
@@ -45,6 +89,7 @@ static const argument_t kArguments[] = {
     {"-signature", kRequiredArgument, "Signature file to verify"},
     {"-keyform", kOptionalArgument, "Key format (DER/PEM), defaults to DER"},
     {"-digest", kRequiredArgument, "Specify message digest algorithm"},
+    {"-list", kBooleanArgument, "List supported message digest algorithms"},
     {"-sha1", kBooleanArgument, "Use SHA-1 digest algorithm"},
     {"-sha224", kBooleanArgument, "Use SHA-224 digest algorithm"},
     {"-sha256", kBooleanArgument, "Use SHA-256 digest algorithm"},
@@ -365,56 +410,23 @@ static bool dgst_tool_op(const args_list_t &args, const EVP_MD *digest) {
         }
 
         const std::string &digest_name = *it;
-        if (digest_name == "sha1") {
-          digest = EVP_sha1();
-        } else if (digest_name == "sha256") {
-          digest = EVP_sha256();
-        } else if (digest_name == "sha384") {
-          digest = EVP_sha384();
-        } else if (digest_name == "sha512") {
-          digest = EVP_sha512();
-        } else if (digest_name == "sha224") {
-          digest = EVP_sha224();
-        } else if (digest_name == "sha3-224") {
-          digest = EVP_sha3_224();
-        } else if (digest_name == "sha3-256") {
-          digest = EVP_sha3_256();
-        } else if (digest_name == "sha3-384") {
-          digest = EVP_sha3_384();
-        } else if (digest_name == "sha3-512") {
-          digest = EVP_sha3_512();
-        } else if (digest_name == "shake128") {
-          digest = EVP_shake128();
-        } else if (digest_name == "shake256") {
-          digest = EVP_shake256();
-        } else {
+        digest = GetDigestFromName(digest_name);
+        if (digest == nullptr) {
           fprintf(stderr, "Unknown digest algorithm: %s\n", digest_name.c_str());
           return false;
         }
       }
+      // List supported digest algorithms
+      else if (option == "list") {
+        PrintSupportedDigests();
+        return true;
+      }
       // Direct digest algorithm options
-      else if (option == "sha1") {
-        digest = EVP_sha1();
-      } else if (option == "sha224") {
-        digest = EVP_sha224();
-      } else if (option == "sha256") {
-        digest = EVP_sha256();
-      } else if (option == "sha384") {
-        digest = EVP_sha384();
-      } else if (option == "sha512") {
-        digest = EVP_sha512();
-      } else if (option == "sha3-224") {
-        digest = EVP_sha3_224();
-      } else if (option == "sha3-256") {
-        digest = EVP_sha3_256();
-      } else if (option == "sha3-384") {
-        digest = EVP_sha3_384();
-      } else if (option == "sha3-512") {
-        digest = EVP_sha3_512();
-      } else if (option == "shake128") {
-        digest = EVP_shake128();
-      } else if (option == "shake256") {
-        digest = EVP_shake256();
+      else if (option == "sha1" || option == "sha224" || option == "sha256" ||
+               option == "sha384" || option == "sha512" || option == "sha3-224" ||
+               option == "sha3-256" || option == "sha3-384" || option == "sha3-512" ||
+               option == "shake128" || option == "shake256") {
+        digest = GetDigestFromName(option);
       } else {
         fprintf(stderr, "Unknown option '%s'.\n", option.c_str());
         return false;

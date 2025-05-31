@@ -611,3 +611,27 @@ TEST_F(DgstComparisonTest, InvalidDigestAlgorithm) {
 
   RemoveFile(input_file.c_str());
 }
+
+// Test list option
+TEST_F(DgstComparisonTest, ListDigestAlgorithms) {
+  // Test the -list option
+  std::string command = std::string(awslc_executable_path) + " dgst -list";
+
+  std::string output;
+  int result = RunCommand(command, &output);
+  EXPECT_EQ(0, result);  // Zero exit code indicates success
+  EXPECT_TRUE(output.find("Supported digests:") != std::string::npos);
+
+  // Check that all supported algorithms are listed
+  EXPECT_TRUE(output.find("sha1") != std::string::npos);
+  EXPECT_TRUE(output.find("sha224") != std::string::npos);
+  EXPECT_TRUE(output.find("sha256") != std::string::npos);
+  EXPECT_TRUE(output.find("sha384") != std::string::npos);
+  EXPECT_TRUE(output.find("sha512") != std::string::npos);
+  EXPECT_TRUE(output.find("sha3-224") != std::string::npos);
+  EXPECT_TRUE(output.find("sha3-256") != std::string::npos);
+  EXPECT_TRUE(output.find("sha3-384") != std::string::npos);
+  EXPECT_TRUE(output.find("sha3-512") != std::string::npos);
+  EXPECT_TRUE(output.find("shake128") != std::string::npos);
+  EXPECT_TRUE(output.find("shake256") != std::string::npos);
+}
