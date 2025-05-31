@@ -347,6 +347,20 @@ TEST_F(DgstVerifyTest, VerifyValidSignatureWithPEM) {
                             awslc_output_str, openssl_output_str);
 }
 
+TEST_F(DgstVerifyTest, VerifyWithDifferentDigestAlgorithm) {
+  // Test verification with different digest algorithm
+  std::string verify_command = "cat " + std::string(message_path) + " | " +
+                              std::string(awslc_executable_path) +
+                              " dgst -sha512 -verify " + std::string(pubkey_path) +
+                              " -signature " + std::string(signature_path);
+
+  // This should fail because the signature was created with SHA-256
+  std::string output;
+  int result = RunCommand(verify_command, &output);
+  EXPECT_NE(0, result);  // Non-zero exit code indicates failure
+  EXPECT_TRUE(output.find("Verification Failure") != std::string::npos);
+}
+
 TEST_F(DgstVerifyTest, VerifyInvalidSignature) {
   // Test verification with invalid signature
   std::string verify_command = "cat " + std::string(message_path) + " | " +
@@ -457,4 +471,143 @@ TEST_F(DgstComparisonTest, MD5_stdin) {
   std::string openssl_hash = GetHash(openssl_output_str);
 
   EXPECT_EQ(tool_hash, openssl_hash);
+}
+
+// Test default digest algorithm (SHA-256)
+TEST_F(DgstComparisonTest, DefaultDigestAlgorithm) {
+  std::string input_file = std::string(in_path);
+  std::ofstream ofs(input_file);
+  ofs << "AWS_LC_TEST_STRING_FOR_DIGEST_ALGORITHMS";
+  ofs.close();
+
+  // Test SHA-256 (default)
+  std::string awslc_command = std::string(awslc_executable_path) +
+                              " dgst " + input_file +
+                              " > " + out_path_awslc;
+  std::string openssl_command = std::string(openssl_executable_path) +
+                                " dgst " + input_file +
+                                " > " + out_path_openssl;
+
+  RunCommandsAndCompareOutput(awslc_command, openssl_command, out_path_awslc,
+                              out_path_openssl, awslc_output_str,
+                              openssl_output_str);
+
+  std::string awslc_hash = GetHash(awslc_output_str);
+  std::string openssl_hash = GetHash(openssl_output_str);
+
+  EXPECT_EQ(awslc_hash, openssl_hash);
+
+  RemoveFile(input_file.c_str());
+}
+
+// Test direct digest algorithm options
+TEST_F(DgstComparisonTest, DirectDigestAlgorithms) {
+  std::string input_file = std::string(in_path);
+  std::ofstream ofs(input_file);
+  ofs << "AWS_LC_TEST_STRING_FOR_DIRECT_DIGEST_ALGORITHMS";
+  ofs.close();
+
+  // Test all supported hash algorithms with direct options
+  struct HashAlgorithm {
+    const char* name;
+    const char* option;
+  };
+
+  HashAlgorithm algorithms[] = {
+    {"SHA-1", "-sha1"},
+    {"SHA-224", "-sha224"},
+    {"SHA-256", "-sha256"},
+    {"SHA-384", "-sha384"},
+    {"SHA-512", "-sha512"},
+    {"SHA3-224", "-sha3-224"},
+    {"SHA3-256", "-sha3-256"},
+    {"SHA3-384", "-sha3-384"},
+    {"SHA3-512", "-sha3-512"},
+    {"SHAKE-128", "-shake128"},
+    {"SHAKE-256", "-shake256"}
+  };
+
+  for (const auto& algo : algorithms) {
+    std::string awslc_command = std::string(awslc_executable_path) +
+                                " dgst " + algo.option + " " + input_file +
+                                " > " + out_path_awslc;
+    std::string openssl_command = std::string(openssl_executable_path) +
+                                  " dgst " + algo.option + " " + input_file +
+                                  " > " + out_path_openssl;
+
+    RunCommandsAndCompareOutput(awslc_command, openssl_command, out_path_awslc,
+                                out_path_openssl, awslc_output_str,
+                                openssl_output_str);
+
+    std::string awslc_hash = GetHash(awslc_output_str);
+    std::string openssl_hash = GetHash(openssl_output_str);
+
+    EXPECT_EQ(awslc_hash, openssl_hash) << "Hash mismatch for " << algo.name;
+  }
+
+  RemoveFile(input_file.c_str());
+}
+
+
+// Test HMAC with direct digest algorithm options
+TEST_F(DgstComparisonTest, HMAC_with_direct_digest) {
+  std::string input_file = std::string(in_path);
+  std::ofstream ofs(input_file);
+  ofs << "AWS_LC_TEST_STRING_FOR_HMAC_WITH_DIRECT_DIGEST";
+  ofs.close();
+
+  // Test HMAC with SHA-512 using direct option
+  std::string awslc_command = std::string(awslc_executable_path) +
+                              " dgst -hmac test_key -sha512 " + input_file +
+                              " > " + out_path_awslc;
+  std::string openssl_command = std::string(openssl_executable_path) +
+                                " dgst -hmac test_key -sha512 " + input_file +
+                                " > " + out_path_openssl;
+
+  RunCommandsAndCompareOutput(awslc_command, openssl_command, out_path_awslc,
+                              out_path_openssl, awslc_output_str,
+                              openssl_output_str);
+
+  std::string awslc_hash = GetHash(awslc_output_str);
+  std::string openssl_hash = GetHash(openssl_output_str);
+
+  EXPECT_EQ(awslc_hash, openssl_hash);
+
+  // Test HMAC with SHA3-256 using direct option
+  awslc_command = std::string(awslc_executable_path) +
+                  " dgst -hmac test_key -sha3-256 " + input_file +
+                  " > " + out_path_awslc;
+  openssl_command = std::string(openssl_executable_path) +
+                    " dgst -hmac test_key -sha3-256 " + input_file +
+                    " > " + out_path_openssl;
+
+  RunCommandsAndCompareOutput(awslc_command, openssl_command, out_path_awslc,
+                              out_path_openssl, awslc_output_str,
+                              openssl_output_str);
+
+  awslc_hash = GetHash(awslc_output_str);
+  openssl_hash = GetHash(openssl_output_str);
+
+  EXPECT_EQ(awslc_hash, openssl_hash);
+
+  RemoveFile(input_file.c_str());
+}
+
+// Test invalid digest algorithm
+TEST_F(DgstComparisonTest, InvalidDigestAlgorithm) {
+  std::string input_file = std::string(in_path);
+  std::ofstream ofs(input_file);
+  ofs << "AWS_LC_TEST_STRING_FOR_INVALID_DIGEST";
+  ofs.close();
+
+  // Test with invalid direct digest algorithm option
+  std::string command = std::string(awslc_executable_path) +
+                        " dgst -invalid_algorithm " + input_file;
+
+  std::string output;
+  int result = RunCommand(command, &output);
+  EXPECT_NE(0, result);  // Non-zero exit code indicates failure
+  EXPECT_TRUE(output.find("Unknown option") != std::string::npos);
+
+  RemoveFile(input_file.c_str());
 }

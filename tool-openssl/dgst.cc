@@ -44,6 +44,18 @@ static const argument_t kArguments[] = {
     {"-verify", kRequiredArgument, "Verify signature using public key file"},
     {"-signature", kRequiredArgument, "Signature file to verify"},
     {"-keyform", kOptionalArgument, "Key format (DER/PEM), defaults to DER"},
+    {"-digest", kRequiredArgument, "Specify message digest algorithm"},
+    {"-sha1", kBooleanArgument, "Use SHA-1 digest algorithm"},
+    {"-sha224", kBooleanArgument, "Use SHA-224 digest algorithm"},
+    {"-sha256", kBooleanArgument, "Use SHA-256 digest algorithm"},
+    {"-sha384", kBooleanArgument, "Use SHA-384 digest algorithm"},
+    {"-sha512", kBooleanArgument, "Use SHA-512 digest algorithm"},
+    {"-sha3-224", kBooleanArgument, "Use SHA3-224 digest algorithm"},
+    {"-sha3-256", kBooleanArgument, "Use SHA3-256 digest algorithm"},
+    {"-sha3-384", kBooleanArgument, "Use SHA3-384 digest algorithm"},
+    {"-sha3-512", kBooleanArgument, "Use SHA3-512 digest algorithm"},
+    {"-shake128", kBooleanArgument, "Use SHAKE-128 digest algorithm"},
+    {"-shake256", kBooleanArgument, "Use SHAKE-256 digest algorithm"},
     {"", kOptionalArgument, ""}};
 
 static bool read_signature_file(const std::string &filename, std::vector<uint8_t> *out) {
@@ -259,8 +271,7 @@ static bool dgst_tool_op(const args_list_t &args, const EVP_MD *digest) {
   bool is_der = true;  // Default to DER format
   std::vector<std::string> file_inputs;
 
-  // Default is SHA-256.
-  // TODO: Make this customizable when "-digest" is introduced.
+  // Default is SHA-256 if no digest is specified
   if (digest == nullptr) {
     digest = EVP_sha256();
   }
@@ -343,6 +354,67 @@ static bool dgst_tool_op(const args_list_t &args, const EVP_MD *digest) {
           fprintf(stderr, "Invalid key format. Use PEM or DER.\n");
           return false;
         }
+      } else if (option == "digest") {
+        // Read next argument as digest algorithm
+        it++;
+        if (it == args.end()) {
+          fprintf(stderr,
+                  "dgst: Option -digest needs a value\n"
+                  "dgst: Use -help for summary.\n");
+          return false;
+        }
+
+        const std::string &digest_name = *it;
+        if (digest_name == "sha1") {
+          digest = EVP_sha1();
+        } else if (digest_name == "sha256") {
+          digest = EVP_sha256();
+        } else if (digest_name == "sha384") {
+          digest = EVP_sha384();
+        } else if (digest_name == "sha512") {
+          digest = EVP_sha512();
+        } else if (digest_name == "sha224") {
+          digest = EVP_sha224();
+        } else if (digest_name == "sha3-224") {
+          digest = EVP_sha3_224();
+        } else if (digest_name == "sha3-256") {
+          digest = EVP_sha3_256();
+        } else if (digest_name == "sha3-384") {
+          digest = EVP_sha3_384();
+        } else if (digest_name == "sha3-512") {
+          digest = EVP_sha3_512();
+        } else if (digest_name == "shake128") {
+          digest = EVP_shake128();
+        } else if (digest_name == "shake256") {
+          digest = EVP_shake256();
+        } else {
+          fprintf(stderr, "Unknown digest algorithm: %s\n", digest_name.c_str());
+          return false;
+        }
+      }
+      // Direct digest algorithm options
+      else if (option == "sha1") {
+        digest = EVP_sha1();
+      } else if (option == "sha224") {
+        digest = EVP_sha224();
+      } else if (option == "sha256") {
+        digest = EVP_sha256();
+      } else if (option == "sha384") {
+        digest = EVP_sha384();
+      } else if (option == "sha512") {
+        digest = EVP_sha512();
+      } else if (option == "sha3-224") {
+        digest = EVP_sha3_224();
+      } else if (option == "sha3-256") {
+        digest = EVP_sha3_256();
+      } else if (option == "sha3-384") {
+        digest = EVP_sha3_384();
+      } else if (option == "sha3-512") {
+        digest = EVP_sha3_512();
+      } else if (option == "shake128") {
+        digest = EVP_shake128();
+      } else if (option == "shake256") {
+        digest = EVP_shake256();
       } else {
         fprintf(stderr, "Unknown option '%s'.\n", option.c_str());
         return false;
