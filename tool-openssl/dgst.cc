@@ -90,6 +90,7 @@ static const argument_t kArguments[] = {
     {"-keyform", kOptionalArgument, "Key format (DER/PEM), defaults to DER"},
     {"-digest", kRequiredArgument, "Specify message digest algorithm"},
     {"-list", kBooleanArgument, "List supported message digest algorithms"},
+    {"-xoflen", kRequiredArgument, "Set output length for XOF algorithms (shake128, shake256)"},
     {"-sha1", kBooleanArgument, "Use SHA-1 digest algorithm"},
     {"-sha224", kBooleanArgument, "Use SHA-224 digest algorithm"},
     {"-sha256", kBooleanArgument, "Use SHA-256 digest algorithm"},
@@ -207,7 +208,7 @@ static bool verify_signature(EVP_PKEY *pkey, const EVP_MD *digest,
 }
 
 static bool dgst_file_op(const std::string &filename, const int fd,
-                         const EVP_MD *digest) {
+                         const EVP_MD *digest, size_t xof_len = 0) {
   static const size_t kBufSize = 8192;
   std::unique_ptr<uint8_t[]> buf(new uint8_t[kBufSize]);
 
@@ -235,11 +236,25 @@ static bool dgst_file_op(const std::string &filename, const int fd,
     }
   }
 
+  // Check if this is an XOF algorithm (SHAKE128 or SHAKE256) and xof_len is specified
+  bool is_xof = (EVP_MD_flags(digest) & EVP_MD_FLAG_XOF) != 0;
+
   uint8_t hash[EVP_MAX_MD_SIZE];
   unsigned hash_len;
-  if (!EVP_DigestFinal_ex(ctx.get(), hash, &hash_len)) {
-    fprintf(stderr, "Failed to finish hash.\n");
-    return false;
+
+  if (is_xof && xof_len > 0) {
+    // For XOF algorithms with specified length, use EVP_DigestFinalXOF
+    if (!EVP_DigestFinalXOF(ctx.get(), hash, xof_len)) {
+      fprintf(stderr, "Failed to finish XOF hash.\n");
+      return false;
+    }
+    hash_len = xof_len;
+  } else {
+    // For regular algorithms or XOF without specified length, use EVP_DigestFinal_ex
+    if (!EVP_DigestFinal_ex(ctx.get(), hash, &hash_len)) {
+      fprintf(stderr, "Failed to finish hash.\n");
+      return false;
+    }
   }
 
   // Print digest output. OpenSSL outputs the digest name with files, but not
@@ -315,6 +330,7 @@ static bool dgst_tool_op(const args_list_t &args, const EVP_MD *digest) {
   std::string signature_file;
   bool is_der = true;  // Default to DER format
   std::vector<std::string> file_inputs;
+  size_t xof_len = 0;  // Output length for XOF algorithms, 0 means use default
 
   // Default is SHA-256 if no digest is specified
   if (digest == nullptr) {
@@ -415,6 +431,32 @@ static bool dgst_tool_op(const args_list_t &args, const EVP_MD *digest) {
           fprintf(stderr, "Unknown digest algorithm: %s\n", digest_name.c_str());
           return false;
         }
+      } else if (option == "xoflen") {
+        // Read next argument as XOF output length
+        it++;
+        if (it == args.end()) {
+          fprintf(stderr,
+                  "dgst: Option -xoflen needs a value\n"
+                  "dgst: Use -help for summary.\n");
+          return false;
+        }
+
+        // Parse xof_len without using exceptions
+        char *endptr;
+        unsigned long value = strtoul(it->c_str(), &endptr, 10);
+
+        // Check for conversion errors
+        if (*endptr != '\0' || endptr == it->c_str()) {
+          fprintf(stderr, "Invalid XOF output length: %s\n", it->c_str());
+          return false;
+        }
+
+        if (value == 0) {
+          fprintf(stderr, "XOF output length must be greater than 0\n");
+          return false;
+        }
+
+        xof_len = value;
       }
       // List supported digest algorithms
       else if (option == "list") {
@@ -535,7 +577,7 @@ static bool dgst_tool_op(const args_list_t &args, const EVP_MD *digest) {
         return false;
       }
     } else {
-      if (!dgst_file_op(file_name, fd, digest)) {
+      if (!dgst_file_op(file_name, fd, digest, xof_len)) {
         return false;
       }
     }
@@ -551,7 +593,7 @@ static bool dgst_tool_op(const args_list_t &args, const EVP_MD *digest) {
         return false;
       }
     } else {
-      if (!dgst_file_op(file_name, fd, digest)) {
+      if (!dgst_file_op(file_name, fd, digest, xof_len)) {
         return false;
       }
     }

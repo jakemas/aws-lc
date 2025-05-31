@@ -51,7 +51,18 @@ std::string GetHash(const std::string &str) {
   if (pos == std::string::npos) {
     return "";
   }
-  return str.substr(pos + 1);
+
+  // Extract the hash part after the equals sign
+  std::string hash = str.substr(pos + 1);
+
+  // Trim leading and trailing whitespace
+  size_t start = hash.find_first_not_of(" \t\n\r");
+  if (start == std::string::npos) {
+    return "";
+  }
+
+  size_t end = hash.find_last_not_of(" \t\n\r");
+  return hash.substr(start, end - start + 1);
 }
 
 // Test against OpenSSL output for "-hmac"
@@ -634,4 +645,150 @@ TEST_F(DgstComparisonTest, ListDigestAlgorithms) {
   EXPECT_TRUE(output.find("sha3-512") != std::string::npos);
   EXPECT_TRUE(output.find("shake128") != std::string::npos);
   EXPECT_TRUE(output.find("shake256") != std::string::npos);
+}
+
+// Test XOF algorithms with -xoflen option
+TEST_F(DgstComparisonTest, XOF_with_xoflen) {
+  std::string input_file = std::string(in_path);
+  std::ofstream ofs(input_file);
+  ofs << "AWS_LC_TEST_STRING_FOR_XOF_ALGORITHMS";
+  ofs.close();
+
+  // Test SHAKE128 with -xoflen 32 (default is 16)
+  std::string awslc_command = std::string(awslc_executable_path) +
+                              " dgst -shake128 -xoflen 32 " + input_file +
+                              " > " + out_path_awslc;
+  std::string openssl_command = std::string(openssl_executable_path) +
+                                " dgst -shake128 -xoflen 32 " + input_file +
+                                " > " + out_path_openssl;
+
+  RunCommandsAndCompareOutput(awslc_command, openssl_command, out_path_awslc,
+                              out_path_openssl, awslc_output_str,
+                              openssl_output_str);
+
+  std::string awslc_hash = GetHash(awslc_output_str);
+  std::string openssl_hash = GetHash(openssl_output_str);
+
+  EXPECT_EQ(awslc_hash, openssl_hash);
+  // Verify the output length is 32 bytes (64 hex characters)
+  EXPECT_EQ(awslc_hash.length(), 64UL);
+
+  // Test SHAKE256 with -xoflen 64 (default is 32)
+  awslc_command = std::string(awslc_executable_path) +
+                  " dgst -shake256 -xoflen 64 " + input_file +
+                  " > " + out_path_awslc;
+  openssl_command = std::string(openssl_executable_path) +
+                    " dgst -shake256 -xoflen 64 " + input_file +
+                    " > " + out_path_openssl;
+
+  RunCommandsAndCompareOutput(awslc_command, openssl_command, out_path_awslc,
+                              out_path_openssl, awslc_output_str,
+                              openssl_output_str);
+
+  awslc_hash = GetHash(awslc_output_str);
+  openssl_hash = GetHash(openssl_output_str);
+
+  EXPECT_EQ(awslc_hash, openssl_hash);
+  // Verify the output length is 64 bytes (128 hex characters)
+  EXPECT_EQ(awslc_hash.length(), 128UL);
+
+  RemoveFile(input_file.c_str());
+}
+
+// Test XOF algorithms with stdin and -xoflen option
+TEST_F(DgstComparisonTest, XOF_with_xoflen_stdin) {
+  // Test SHAKE128 with -xoflen 32 using stdin
+  std::string awslc_command = "echo xof_test_string | " +
+                              std::string(awslc_executable_path) +
+                              " dgst -shake128 -xoflen 32 > " + out_path_awslc;
+  std::string openssl_command = "echo xof_test_string | " +
+                                std::string(openssl_executable_path) +
+                                " dgst -shake128 -xoflen 32 > " + out_path_openssl;
+
+  RunCommandsAndCompareOutput(awslc_command, openssl_command, out_path_awslc,
+                              out_path_openssl, awslc_output_str,
+                              openssl_output_str);
+
+  std::string awslc_hash = GetHash(awslc_output_str);
+  std::string openssl_hash = GetHash(openssl_output_str);
+
+  EXPECT_EQ(awslc_hash, openssl_hash);
+  // Verify the output length is 32 bytes (64 hex characters)
+  EXPECT_EQ(awslc_hash.length(), 64UL);
+
+  // Test SHAKE256 with -xoflen 64 using stdin
+  awslc_command = "echo xof_test_string | " +
+                  std::string(awslc_executable_path) +
+                  " dgst -shake256 -xoflen 64 > " + out_path_awslc;
+  openssl_command = "echo xof_test_string | " +
+                    std::string(openssl_executable_path) +
+                    " dgst -shake256 -xoflen 64 > " + out_path_openssl;
+
+  RunCommandsAndCompareOutput(awslc_command, openssl_command, out_path_awslc,
+                              out_path_openssl, awslc_output_str,
+                              openssl_output_str);
+
+  awslc_hash = GetHash(awslc_output_str);
+  openssl_hash = GetHash(openssl_output_str);
+
+  EXPECT_EQ(awslc_hash, openssl_hash);
+  // Verify the output length is 64 bytes (128 hex characters)
+  EXPECT_EQ(awslc_hash.length(), 128UL);
+}
+
+// Test invalid -xoflen values
+TEST_F(DgstComparisonTest, InvalidXoflen) {
+  std::string input_file = std::string(in_path);
+  std::ofstream ofs(input_file);
+  ofs << "AWS_LC_TEST_STRING_FOR_INVALID_XOFLEN";
+  ofs.close();
+
+  // Test with invalid -xoflen value (non-numeric)
+  std::string command = std::string(awslc_executable_path) +
+                        " dgst -shake128 -xoflen invalid " + input_file;
+
+  std::string output;
+  int result = RunCommand(command, &output);
+  EXPECT_NE(0, result);  // Non-zero exit code indicates failure
+  EXPECT_TRUE(output.find("Invalid XOF output length") != std::string::npos);
+
+  // Test with -xoflen 0 (should fail)
+  command = std::string(awslc_executable_path) +
+            " dgst -shake128 -xoflen 0 " + input_file;
+
+  output.clear();
+  result = RunCommand(command, &output);
+  EXPECT_NE(0, result);  // Non-zero exit code indicates failure
+  EXPECT_TRUE(output.find("XOF output length must be greater than 0") != std::string::npos);
+
+  RemoveFile(input_file.c_str());
+}
+
+// Test -xoflen with non-XOF algorithms (should work but ignore the length)
+TEST_F(DgstComparisonTest, XoflenWithNonXOF) {
+  std::string input_file = std::string(in_path);
+  std::ofstream ofs(input_file);
+  ofs << "AWS_LC_TEST_STRING_FOR_XOFLEN_WITH_NON_XOF";
+  ofs.close();
+
+  // Test SHA-256 with -xoflen (should be ignored)
+  std::string awslc_command = std::string(awslc_executable_path) +
+                              " dgst -sha256 -xoflen 64 " + input_file +
+                              " > " + out_path_awslc;
+  std::string openssl_command = std::string(openssl_executable_path) +
+                                " dgst -sha256 " + input_file +
+                                " > " + out_path_openssl;
+
+  RunCommandsAndCompareOutput(awslc_command, openssl_command, out_path_awslc,
+                              out_path_openssl, awslc_output_str,
+                              openssl_output_str);
+
+  std::string awslc_hash = GetHash(awslc_output_str);
+  std::string openssl_hash = GetHash(openssl_output_str);
+
+  EXPECT_EQ(awslc_hash, openssl_hash);
+  // SHA-256 output should still be 32 bytes (64 hex characters)
+  EXPECT_EQ(awslc_hash.length(), 64UL);
+
+  RemoveFile(input_file.c_str());
 }
