@@ -91,6 +91,7 @@ static const argument_t kArguments[] = {
     {"-digest", kRequiredArgument, "Specify message digest algorithm"},
     {"-list", kBooleanArgument, "List supported message digest algorithms"},
     {"-xoflen", kRequiredArgument, "Set output length for XOF algorithms (shake128, shake256)"},
+    {"-binary", kBooleanArgument, "Output the digest or signature in binary form"},
     {"-sha1", kBooleanArgument, "Use SHA-1 digest algorithm"},
     {"-sha224", kBooleanArgument, "Use SHA-224 digest algorithm"},
     {"-sha256", kBooleanArgument, "Use SHA-256 digest algorithm"},
@@ -208,7 +209,8 @@ static bool verify_signature(EVP_PKEY *pkey, const EVP_MD *digest,
 }
 
 static bool dgst_file_op(const std::string &filename, const int fd,
-                         const EVP_MD *digest, size_t xof_len = 0) {
+                         const EVP_MD *digest, size_t xof_len = 0,
+                         bool binary_output = false) {
   // Set default XOF lengths if not specified
   if (xof_len == 0) {
     if (EVP_MD_type(digest) == NID_shake128) {
@@ -265,23 +267,28 @@ static bool dgst_file_op(const std::string &filename, const int fd,
     }
   }
 
-  // Print digest output. OpenSSL outputs the digest name with files, but not
-  // with stdin.
-  if (fd != 0) {
-    fprintf(stdout, "%s(%s)= ", EVP_MD_get0_name(digest), filename.c_str());
+  // Handle binary output
+  if (binary_output) {
+    // Write binary hash directly to stdout
+    fwrite(hash, 1, hash_len, stdout);
   } else {
-    fprintf(stdout, "(%s)= ", filename.c_str());
-  };
-  for (size_t i = 0; i < hash_len; i++) {
-    fprintf(stdout, "%02x", hash[i]);
+    // Print digest output in hex format. OpenSSL outputs the digest name with files, but not with stdin.
+    if (fd != 0) {
+      fprintf(stdout, "%s(%s)= ", EVP_MD_get0_name(digest), filename.c_str());
+    } else {
+      fprintf(stdout, "(%s)= ", filename.c_str());
+    }
+    for (size_t i = 0; i < hash_len; i++) {
+      fprintf(stdout, "%02x", hash[i]);
+    }
+    fprintf(stdout, "\n");
   }
-  fprintf(stdout, "\n");
   return true;
 }
 
 static bool hmac_file_op(const std::string &filename, const int fd,
                          const EVP_MD *digest, const char *hmac_key,
-                         const size_t hmac_key_len) {
+                         const size_t hmac_key_len, bool binary_output = false) {
   static const size_t kBufSize = 8192;
   std::unique_ptr<uint8_t[]> buf(new uint8_t[kBufSize]);
 
@@ -337,17 +344,23 @@ static bool hmac_file_op(const std::string &filename, const int fd,
       return false;
     }
 
-    // Print HMAC output
-    if (fd != 0) {
-      fprintf(stdout, "HMAC-%s(%s)= ", EVP_MD_get0_name(digest),
-              filename.c_str());
+    // Handle binary output
+    if (binary_output) {
+      // Write binary MAC directly to stdout
+      fwrite(mac.get(), 1, mac_len, stdout);
     } else {
-      fprintf(stdout, "(%s)= ", filename.c_str());
+      // Print HMAC output in hex format
+      if (fd != 0) {
+        fprintf(stdout, "HMAC-%s(%s)= ", EVP_MD_get0_name(digest),
+                filename.c_str());
+      } else {
+        fprintf(stdout, "(%s)= ", filename.c_str());
+      }
+      for (size_t i = 0; i < mac_len; i++) {
+        fprintf(stdout, "%02x", mac[i]);
+      }
+      fprintf(stdout, "\n");
     }
-    for (size_t i = 0; i < mac_len; i++) {
-      fprintf(stdout, "%02x", mac[i]);
-    }
-    fprintf(stdout, "\n");
     return true;
   } else {
     // Use HMAC_* for other algorithms
@@ -384,18 +397,23 @@ static bool hmac_file_op(const std::string &filename, const int fd,
       return false;
     }
 
-    // Print HMAC output. OpenSSL outputs the digest name with files, but not
-    // with stdin.
-    if (fd != 0) {
-      fprintf(stdout, "HMAC-%s(%s)= ", EVP_MD_get0_name(digest),
-              filename.c_str());
+    // Handle binary output
+    if (binary_output) {
+      // Write binary MAC directly to stdout
+      fwrite(mac.get(), 1, mac_len, stdout);
     } else {
-      fprintf(stdout, "(%s)= ", filename.c_str());
-    };
-    for (size_t i = 0; i < expected_mac_len; i++) {
-      fprintf(stdout, "%02x", mac[i]);
+      // Print HMAC output in hex format. OpenSSL outputs the digest name with files, but not with stdin.
+      if (fd != 0) {
+        fprintf(stdout, "HMAC-%s(%s)= ", EVP_MD_get0_name(digest),
+                filename.c_str());
+      } else {
+        fprintf(stdout, "(%s)= ", filename.c_str());
+      }
+      for (size_t i = 0; i < expected_mac_len; i++) {
+        fprintf(stdout, "%02x", mac[i]);
+      }
+      fprintf(stdout, "\n");
     }
-    fprintf(stdout, "\n");
     return true;
   }
 }
@@ -404,6 +422,7 @@ static bool dgst_tool_op(const args_list_t &args, const EVP_MD *digest) {
   std::string verify_key_file;
   std::string signature_file;
   bool is_der = true;  // Default to DER format
+  bool binary_output = false;  // Default to hex output
   std::vector<std::string> file_inputs;
   size_t xof_len = 0;  // Output length for XOF algorithms, 0 means use default
 
@@ -538,6 +557,9 @@ static bool dgst_tool_op(const args_list_t &args, const EVP_MD *digest) {
         PrintSupportedDigests();
         return true;
       }
+      else if (option == "binary") {
+        binary_output = true;
+      }
       // Direct digest algorithm options
       else if (option == "sha1" || option == "sha224" || option == "sha256" ||
                option == "sha384" || option == "sha512" || option == "sha3-224" ||
@@ -648,11 +670,11 @@ static bool dgst_tool_op(const args_list_t &args, const EVP_MD *digest) {
     std::string file_name = "stdin";
     int fd = 0;
     if (hmac_key) {
-      if (!hmac_file_op(file_name, fd, digest, hmac_key, hmac_key_len)) {
+      if (!hmac_file_op(file_name, fd, digest, hmac_key, hmac_key_len, binary_output)) {
         return false;
       }
     } else {
-      if (!dgst_file_op(file_name, fd, digest, xof_len)) {
+      if (!dgst_file_op(file_name, fd, digest, xof_len, binary_output)) {
         return false;
       }
     }
@@ -664,11 +686,11 @@ static bool dgst_tool_op(const args_list_t &args, const EVP_MD *digest) {
     ScopedFD scoped_fd = OpenFD(file_name.c_str(), O_RDONLY | O_BINARY);
     int fd = scoped_fd.get();
     if (hmac_key) {
-      if (!hmac_file_op(file_name, fd, digest, hmac_key, hmac_key_len)) {
+      if (!hmac_file_op(file_name, fd, digest, hmac_key, hmac_key_len, binary_output)) {
         return false;
       }
     } else {
-      if (!dgst_file_op(file_name, fd, digest, xof_len)) {
+      if (!dgst_file_op(file_name, fd, digest, xof_len, binary_output)) {
         return false;
       }
     }

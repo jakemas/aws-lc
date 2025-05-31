@@ -675,6 +675,117 @@ TEST_F(DgstComparisonTest, ListDigestAlgorithms) {
   EXPECT_TRUE(output.find("shake256") != std::string::npos);
 }
 
+// Test binary output option
+TEST_F(DgstComparisonTest, BinaryOutput) {
+  std::string input_file = std::string(in_path);
+  std::ofstream ofs(input_file);
+  ofs << "AWS_LC_TEST_STRING_FOR_BINARY_OUTPUT";
+  ofs.close();
+
+  // Test SHA-256 with binary output
+  std::string awslc_command = std::string(awslc_executable_path) +
+                              " dgst -sha256 -binary " + input_file +
+                              " > " + out_path_awslc;
+  std::string openssl_command = std::string(openssl_executable_path) +
+                                " dgst -sha256 -binary " + input_file +
+                                " > " + out_path_openssl;
+
+  // Execute both commands
+  system(awslc_command.c_str());
+  system(openssl_command.c_str());
+
+  // Compare binary outputs directly
+  std::ifstream awslc_file(out_path_awslc, std::ios::binary);
+  std::ifstream openssl_file(out_path_openssl, std::ios::binary);
+
+  std::vector<char> awslc_data((std::istreambuf_iterator<char>(awslc_file)), std::istreambuf_iterator<char>());
+  std::vector<char> openssl_data((std::istreambuf_iterator<char>(openssl_file)), std::istreambuf_iterator<char>());
+
+  EXPECT_EQ(awslc_data.size(), openssl_data.size());
+  EXPECT_EQ(awslc_data, openssl_data);
+
+  // Test HMAC with binary output
+  awslc_command = std::string(awslc_executable_path) +
+                  " dgst -hmac test_key -sha256 -binary " + input_file +
+                  " > " + out_path_awslc;
+  openssl_command = std::string(openssl_executable_path) +
+                    " dgst -hmac test_key -sha256 -binary " + input_file +
+                    " > " + out_path_openssl;
+
+  // Execute both commands
+  system(awslc_command.c_str());
+  system(openssl_command.c_str());
+
+  // Compare binary outputs directly
+  awslc_file = std::ifstream(out_path_awslc, std::ios::binary);
+  openssl_file = std::ifstream(out_path_openssl, std::ios::binary);
+
+  awslc_data = std::vector<char>((std::istreambuf_iterator<char>(awslc_file)), std::istreambuf_iterator<char>());
+  openssl_data = std::vector<char>((std::istreambuf_iterator<char>(openssl_file)), std::istreambuf_iterator<char>());
+
+  EXPECT_EQ(awslc_data.size(), openssl_data.size());
+  EXPECT_EQ(awslc_data, openssl_data);
+
+  RemoveFile(input_file.c_str());
+}
+
+// Test binary output with stdin
+TEST_F(DgstComparisonTest, BinaryOutputStdin) {
+  // Test SHA-256 with binary output from stdin
+  std::string awslc_command = "echo -n binary_test_string | " +
+                              std::string(awslc_executable_path) +
+                              " dgst -sha256 -binary > " + out_path_awslc;
+  std::string openssl_command = "echo -n binary_test_string | " +
+                                std::string(openssl_executable_path) +
+                                " dgst -sha256 -binary > " + out_path_openssl;
+
+  // Execute both commands
+  system(awslc_command.c_str());
+  system(openssl_command.c_str());
+
+  // Compare binary outputs directly
+  std::ifstream awslc_file(out_path_awslc, std::ios::binary);
+  std::ifstream openssl_file(out_path_openssl, std::ios::binary);
+
+  std::vector<char> awslc_data((std::istreambuf_iterator<char>(awslc_file)), std::istreambuf_iterator<char>());
+  std::vector<char> openssl_data((std::istreambuf_iterator<char>(openssl_file)), std::istreambuf_iterator<char>());
+
+  EXPECT_EQ(awslc_data.size(), openssl_data.size());
+  EXPECT_EQ(awslc_data, openssl_data);
+}
+
+// Test binary output with XOF algorithms
+TEST_F(DgstComparisonTest, BinaryOutputXOF) {
+  std::string input_file = std::string(in_path);
+  std::ofstream ofs(input_file);
+  ofs << "AWS_LC_TEST_STRING_FOR_BINARY_XOF_OUTPUT";
+  ofs.close();
+
+  // Test SHAKE256 with binary output and custom length
+  std::string awslc_command = std::string(awslc_executable_path) +
+                              " dgst -shake256 -xoflen 64 -binary " + input_file +
+                              " > " + out_path_awslc;
+  std::string openssl_command = std::string(openssl_executable_path) +
+                                " dgst -shake256 -xoflen 64 -binary " + input_file +
+                                " > " + out_path_openssl;
+
+  // Execute both commands
+  system(awslc_command.c_str());
+  system(openssl_command.c_str());
+
+  // Compare binary outputs directly
+  std::ifstream awslc_file(out_path_awslc, std::ios::binary);
+  std::ifstream openssl_file(out_path_openssl, std::ios::binary);
+
+  std::vector<char> awslc_data((std::istreambuf_iterator<char>(awslc_file)), std::istreambuf_iterator<char>());
+  std::vector<char> openssl_data((std::istreambuf_iterator<char>(openssl_file)), std::istreambuf_iterator<char>());
+
+  EXPECT_EQ(awslc_data.size(), 64UL);  // Should be exactly 64 bytes
+  EXPECT_EQ(awslc_data, openssl_data);
+
+  RemoveFile(input_file.c_str());
+}
+
 // Test XOF algorithms with -xoflen option
 TEST_F(DgstComparisonTest, XOF_with_xoflen) {
   std::string input_file = std::string(in_path);
