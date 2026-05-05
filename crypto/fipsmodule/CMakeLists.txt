@@ -397,7 +397,8 @@ if((ARCH STREQUAL "x86_64") AND UNIX AND NOT MY_ASSEMBLER_IS_TOO_OLD_FOR_AVX)
 
 endif()
 
-# mldsa-native assembly files can be compiled on Unix platforms for x86_64 only.
+# mldsa-native assembly files can be compiled on Unix platforms for x86_64
+# and aarch64.
 if((ARCH STREQUAL "x86_64") AND UNIX AND NOT MY_ASSEMBLER_IS_TOO_OLD_FOR_AVX)
 
   set(MLDSA_NATIVE_DIR "${AWSLC_SOURCE_DIR}/crypto/fipsmodule/ml_dsa")
@@ -410,6 +411,20 @@ if((ARCH STREQUAL "x86_64") AND UNIX AND NOT MY_ASSEMBLER_IS_TOO_OLD_FOR_AVX)
     "${MLDSA_NATIVE_DIR}/mldsa/native/x86_64/src/*.S")
 
   list(APPEND BCM_ASM_SOURCES ${MLDSA_NATIVE_X86_64_ASM_SOURCES})
+
+  set(S2N_BIGNUM_INCLUDE_DIR "${AWSLC_SOURCE_DIR}/third_party/s2n-bignum/s2n-bignum-imported/include")
+
+endif()
+
+if((ARCH STREQUAL "aarch64") AND UNIX)
+
+  set(MLDSA_NATIVE_DIR "${AWSLC_SOURCE_DIR}/crypto/fipsmodule/ml_dsa")
+
+  # See x86_64 comment above; same glob-based convention.
+  file(GLOB MLDSA_NATIVE_AARCH64_ASM_SOURCES CONFIGURE_DEPENDS
+    "${MLDSA_NATIVE_DIR}/mldsa/native/aarch64/src/*.S")
+
+  list(APPEND BCM_ASM_SOURCES ${MLDSA_NATIVE_AARCH64_ASM_SOURCES})
 
   set(S2N_BIGNUM_INCLUDE_DIR "${AWSLC_SOURCE_DIR}/third_party/s2n-bignum/s2n-bignum-imported/include")
 
