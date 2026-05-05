@@ -9,6 +9,7 @@
 #include "common.h"
 #include "poly.h"
 
+#if !defined(MLD_CONFIG_NO_SIGN_API)
 #define mld_poly_decompose MLD_NAMESPACE_KL(poly_decompose)
 /*************************************************
  * Name:        mld_poly_decompose
@@ -58,6 +59,7 @@ __contract__(
  * Returns number of 1 bits.
  **************************************************/
 MLD_INTERNAL_API
+MLD_MUST_CHECK_RETURN_VALUE
 unsigned int mld_poly_make_hint(mld_poly *h, const mld_poly *a0,
                                 const mld_poly *a1)
 __contract__(
@@ -68,30 +70,31 @@ __contract__(
   ensures(return_value <= MLDSA_N)
   ensures(array_bound(h->coeffs, 0, MLDSA_N, 0, 2))
 );
+#endif /* !MLD_CONFIG_NO_SIGN_API */
 
+#if !defined(MLD_CONFIG_NO_VERIFY_API)
 #define mld_poly_use_hint MLD_NAMESPACE_KL(poly_use_hint)
 /*************************************************
  * Name:        mld_poly_use_hint
  *
- * Description: Use hint polynomial to correct the high bits of a polynomial.
+ * Description: Use hint polynomial h to correct the high bits of a in-place.
  *
- * Arguments:   - mld_poly *b: pointer to output polynomial with corrected high
- *bits
- *              - const mld_poly *a: pointer to input polynomial
- *              - const mld_poly *h: pointer to input hint polynomial
+ * Arguments:   - mld_poly *a: input/output polynomial
+ *              - const mld_poly *h: hint polynomial
  **************************************************/
 MLD_INTERNAL_API
-void mld_poly_use_hint(mld_poly *b, const mld_poly *a, const mld_poly *h)
+void mld_poly_use_hint(mld_poly *a, const mld_poly *h)
 __contract__(
-  requires(memory_no_alias(a,  sizeof(mld_poly)))
-  requires(memory_no_alias(b, sizeof(mld_poly)))
+  requires(memory_no_alias(a, sizeof(mld_poly)))
   requires(memory_no_alias(h, sizeof(mld_poly)))
   requires(array_bound(a->coeffs, 0, MLDSA_N, 0, MLDSA_Q))
   requires(array_bound(h->coeffs, 0, MLDSA_N, 0, 2))
-  assigns(memory_slice(b, sizeof(mld_poly)))
-  ensures(array_bound(b->coeffs, 0, MLDSA_N, 0, (MLDSA_Q-1)/(2*MLDSA_GAMMA2)))
+  assigns(memory_slice(a, sizeof(mld_poly)))
+  ensures(array_bound(a->coeffs, 0, MLDSA_N, 0, (MLDSA_Q-1)/(2*MLDSA_GAMMA2)))
 );
+#endif /* !MLD_CONFIG_NO_VERIFY_API */
 
+#if !defined(MLD_CONFIG_NO_KEYPAIR_API)
 #if !defined(MLD_CONFIG_SERIAL_FIPS202_ONLY)
 #define mld_poly_uniform_eta_4x MLD_NAMESPACE_KL(poly_uniform_eta_4x)
 /*************************************************
@@ -158,8 +161,12 @@ __contract__(
   ensures(array_abs_bound(r->coeffs, 0, MLDSA_N, MLDSA_ETA + 1))
 );
 #endif /* MLD_CONFIG_SERIAL_FIPS202_ONLY */
+#endif /* !MLD_CONFIG_NO_KEYPAIR_API */
 
-#if MLD_CONFIG_PARAMETER_SET == 65 || defined(MLD_CONFIG_SERIAL_FIPS202_ONLY)
+#if !defined(MLD_CONFIG_NO_SIGN_API)
+#if MLD_CONFIG_PARAMETER_SET == 65 ||          \
+    defined(MLD_CONFIG_SERIAL_FIPS202_ONLY) || \
+    defined(MLD_CONFIG_REDUCE_RAM) || defined(MLD_UNIT_TEST)
 #define mld_poly_uniform_gamma1 MLD_NAMESPACE_KL(poly_uniform_gamma1)
 /*************************************************
  * Name:        mld_poly_uniform_gamma1
@@ -182,9 +189,11 @@ __contract__(
   assigns(memory_slice(a, sizeof(mld_poly)))
   ensures(array_bound(a->coeffs, 0, MLDSA_N, -(MLDSA_GAMMA1 - 1), MLDSA_GAMMA1 + 1))
 );
-#endif /* MLD_CONFIG_PARAMETER_SET == 65 || MLD_CONFIG_SERIAL_FIPS202_ONLY */
+#endif /* MLD_CONFIG_PARAMETER_SET == 65 || MLD_CONFIG_SERIAL_FIPS202_ONLY || \
+          MLD_CONFIG_REDUCE_RAM || MLD_UNIT_TEST */
 
-#if !defined(MLD_CONFIG_SERIAL_FIPS202_ONLY)
+#if !defined(MLD_CONFIG_SERIAL_FIPS202_ONLY) && \
+    (!defined(MLD_CONFIG_REDUCE_RAM) || defined(MLD_UNIT_TEST))
 #define mld_poly_uniform_gamma1_4x MLD_NAMESPACE_KL(poly_uniform_gamma1_4x)
 /*************************************************
  * Name:        mld_poly_uniform_gamma1_4x
@@ -219,8 +228,11 @@ __contract__(
   ensures(array_bound(r2->coeffs, 0, MLDSA_N, -(MLDSA_GAMMA1 - 1), MLDSA_GAMMA1 + 1))
   ensures(array_bound(r3->coeffs, 0, MLDSA_N, -(MLDSA_GAMMA1 - 1), MLDSA_GAMMA1 + 1))
 );
-#endif /* !MLD_CONFIG_SERIAL_FIPS202_ONLY */
+#endif /* !MLD_CONFIG_SERIAL_FIPS202_ONLY && (!MLD_CONFIG_REDUCE_RAM || \
+          MLD_UNIT_TEST) */
+#endif /* !MLD_CONFIG_NO_SIGN_API */
 
+#if !defined(MLD_CONFIG_NO_SIGN_API) || !defined(MLD_CONFIG_NO_VERIFY_API)
 #define mld_poly_challenge MLD_NAMESPACE_KL(poly_challenge)
 /*************************************************
  * Name:        mld_poly_challenge
@@ -242,7 +254,9 @@ __contract__(
   /* All coefficients of c are -1, 0 or +1 */
   ensures(array_bound(c->coeffs, 0, MLDSA_N, -1, 2))
 );
+#endif /* !MLD_CONFIG_NO_SIGN_API || !MLD_CONFIG_NO_VERIFY_API */
 
+#if !defined(MLD_CONFIG_NO_KEYPAIR_API)
 #define mld_polyeta_pack MLD_NAMESPACE_KL(polyeta_pack)
 /*************************************************
  * Name:        mld_polyeta_pack
@@ -261,7 +275,9 @@ __contract__(
   requires(array_abs_bound(a->coeffs, 0, MLDSA_N, MLDSA_ETA + 1))
   assigns(memory_slice(r, MLDSA_POLYETA_PACKEDBYTES))
 );
+#endif /* !MLD_CONFIG_NO_KEYPAIR_API */
 
+#if !defined(MLD_CONFIG_NO_KEYPAIR_API) || !defined(MLD_CONFIG_NO_SIGN_API)
 /*
  * polyeta_unpack produces coefficients in [-MLDSA_ETA,MLDSA_ETA] for
  * well-formed inputs (i.e., those produced by polyeta_pack).
@@ -295,7 +311,9 @@ __contract__(
   assigns(memory_slice(r, sizeof(mld_poly)))
   ensures(array_bound(r->coeffs, 0, MLDSA_N, MLD_POLYETA_UNPACK_LOWER_BOUND, MLDSA_ETA + 1))
 );
+#endif /* !MLD_CONFIG_NO_KEYPAIR_API || !MLD_CONFIG_NO_SIGN_API */
 
+#if !defined(MLD_CONFIG_NO_SIGN_API)
 #define mld_polyz_pack MLD_NAMESPACE_KL(polyz_pack)
 /*************************************************
  * Name:        mld_polyz_pack
@@ -315,8 +333,9 @@ __contract__(
   requires(array_bound(a->coeffs, 0, MLDSA_N, -(MLDSA_GAMMA1 - 1), MLDSA_GAMMA1 + 1))
   assigns(memory_slice(r, MLDSA_POLYZ_PACKEDBYTES))
 );
+#endif /* !MLD_CONFIG_NO_SIGN_API */
 
-
+#if !defined(MLD_CONFIG_NO_SIGN_API) || !defined(MLD_CONFIG_NO_VERIFY_API)
 #define mld_polyz_unpack MLD_NAMESPACE_KL(polyz_unpack)
 /*************************************************
  * Name:        mld_polyz_unpack
@@ -355,5 +374,6 @@ __contract__(
   requires(array_bound(a->coeffs, 0, MLDSA_N, 0, (MLDSA_Q-1)/(2*MLDSA_GAMMA2)))
   assigns(memory_slice(r, MLDSA_POLYW1_PACKEDBYTES))
 );
+#endif /* !MLD_CONFIG_NO_SIGN_API || !MLD_CONFIG_NO_VERIFY_API */
 
 #endif /* !MLD_POLY_KL_H */

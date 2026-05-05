@@ -5,7 +5,6 @@
 #ifndef MLD_POLY_H
 #define MLD_POLY_H
 
-#include <stdint.h>
 #include "cbmc.h"
 #include "common.h"
 #include "reduce.h"
@@ -58,6 +57,8 @@ __contract__(
   ensures(array_bound(a->coeffs, 0, MLDSA_N, 0, MLDSA_Q))
 );
 
+#if !defined(MLD_CONFIG_NO_KEYPAIR_API) || !defined(MLD_CONFIG_NO_SIGN_API) || \
+    defined(MLD_CONFIG_REDUCE_RAM) || defined(MLD_UNIT_TEST)
 #define mld_poly_add MLD_NAMESPACE(poly_add)
 /*************************************************
  * Name:        mld_poly_add
@@ -85,7 +86,10 @@ __contract__(
   ensures(forall(k3, 0, MLDSA_N, r->coeffs[k3] < MLD_REDUCE32_DOMAIN_MAX))
   ensures(forall(k4, 0, MLDSA_N, r->coeffs[k4] >= INT32_MIN))
 );
+#endif /* !MLD_CONFIG_NO_KEYPAIR_API || !MLD_CONFIG_NO_SIGN_API || \
+          MLD_CONFIG_REDUCE_RAM || MLD_UNIT_TEST */
 
+#if !defined(MLD_CONFIG_NO_SIGN_API) || !defined(MLD_CONFIG_NO_VERIFY_API)
 #define mld_poly_sub MLD_NAMESPACE(poly_sub)
 /*************************************************
  * Name:        mld_poly_sub
@@ -111,7 +115,9 @@ __contract__(
   assigns(memory_slice(r, sizeof(mld_poly)))
   ensures(array_bound(r->coeffs, 0, MLDSA_N, INT32_MIN, MLD_REDUCE32_DOMAIN_MAX))
 );
+#endif /* !MLD_CONFIG_NO_SIGN_API || !MLD_CONFIG_NO_VERIFY_API */
 
+#if !defined(MLD_CONFIG_NO_VERIFY_API)
 #define mld_poly_shiftl MLD_NAMESPACE(poly_shiftl)
 /*************************************************
  * Name:        mld_poly_shiftl
@@ -129,6 +135,7 @@ __contract__(
   assigns(memory_slice(a, sizeof(mld_poly)))
   ensures(array_bound(a->coeffs, 0, MLDSA_N, 0, MLDSA_Q))
 );
+#endif /* !MLD_CONFIG_NO_VERIFY_API */
 
 #define mld_poly_ntt MLD_NAMESPACE(poly_ntt)
 /*************************************************
@@ -169,31 +176,35 @@ __contract__(
   ensures(array_abs_bound(a->coeffs, 0, MLDSA_N, MLD_INTT_BOUND))
 );
 
+#if !defined(MLD_CONFIG_NO_SIGN_API) || !defined(MLD_CONFIG_NO_VERIFY_API) || \
+    defined(MLD_CONFIG_REDUCE_RAM) || defined(MLD_UNIT_TEST)
 #define mld_poly_pointwise_montgomery MLD_NAMESPACE(poly_pointwise_montgomery)
 /*************************************************
  * Name:        mld_poly_pointwise_montgomery
  *
  * Description: Pointwise multiplication of polynomials in NTT domain
  *              representation and multiplication of resulting polynomial
- *              by 2^{-32}.
+ *              by 2^{-32}. Destructive in the first argument.
  *
- * Arguments:   - mld_poly *c: pointer to output polynomial
- *              - const mld_poly *a: pointer to first input polynomial
+ * Arguments:   - mld_poly *a: pointer to first input/output polynomial.
+ *                On entry, holds the first multiplicand; on exit, holds
+ *                the product a * b * 2^{-32}.
  *              - const mld_poly *b: pointer to second input polynomial
  **************************************************/
 MLD_INTERNAL_API
-void mld_poly_pointwise_montgomery(mld_poly *c, const mld_poly *a,
-                                   const mld_poly *b)
+void mld_poly_pointwise_montgomery(mld_poly *a, const mld_poly *b)
 __contract__(
   requires(memory_no_alias(a, sizeof(mld_poly)))
   requires(memory_no_alias(b, sizeof(mld_poly)))
-  requires(memory_no_alias(c, sizeof(mld_poly)))
   requires(array_abs_bound(a->coeffs, 0, MLDSA_N, MLD_NTT_BOUND))
   requires(array_abs_bound(b->coeffs, 0, MLDSA_N, MLD_NTT_BOUND))
-  assigns(memory_slice(c, sizeof(mld_poly)))
-  ensures(array_abs_bound(c->coeffs, 0, MLDSA_N, MLDSA_Q))
+  assigns(memory_slice(a, sizeof(mld_poly)))
+  ensures(array_abs_bound(a->coeffs, 0, MLDSA_N, MLDSA_Q))
 );
+#endif /* !MLD_CONFIG_NO_SIGN_API || !MLD_CONFIG_NO_VERIFY_API || \
+          MLD_CONFIG_REDUCE_RAM || MLD_UNIT_TEST */
 
+#if !defined(MLD_CONFIG_NO_KEYPAIR_API)
 #define mld_poly_power2round MLD_NAMESPACE(poly_power2round)
 /*************************************************
  * Name:        mld_poly_power2round
@@ -201,12 +212,12 @@ __contract__(
  * Description: For all coefficients c of the input polynomial,
  *              compute c0, c1 such that c mod MLDSA_Q = c1*2^MLDSA_D + c0
  *              with -2^{MLDSA_D-1} < c0 <= 2^{MLDSA_D-1}. Assumes coefficients
- *to be standard representatives.
+ *              to be standard representatives.
  *
  * Arguments:   - mld_poly *a1: pointer to output polynomial with coefficients
- *c1
+ *                c1
  *              - mld_poly *a0: pointer to output polynomial with coefficients
- *c0
+ *                c0; may alias the input polynomial a
  *              - const mld_poly *a: pointer to input polynomial
  **************************************************/
 MLD_INTERNAL_API
@@ -214,13 +225,16 @@ void mld_poly_power2round(mld_poly *a1, mld_poly *a0, const mld_poly *a)
 __contract__(
   requires(memory_no_alias(a0, sizeof(mld_poly)))
   requires(memory_no_alias(a1, sizeof(mld_poly)))
-  requires(memory_no_alias(a, sizeof(mld_poly)))
+  /* The implementation does not require a0 == a, but the single call site
+   * aliases them and asserting equality simplifies the proof. */
+  requires(a0 == a)
   requires(array_bound(a->coeffs, 0, MLDSA_N, 0, MLDSA_Q))
   assigns(memory_slice(a1, sizeof(mld_poly)))
   assigns(memory_slice(a0, sizeof(mld_poly)))
   ensures(array_bound(a0->coeffs, 0, MLDSA_N, -(MLD_2_POW_D/2)+1, (MLD_2_POW_D/2)+1))
   ensures(array_bound(a1->coeffs, 0, MLDSA_N, 0, ((MLDSA_Q - 1) / MLD_2_POW_D) + 1))
 );
+#endif /* !MLD_CONFIG_NO_KEYPAIR_API */
 
 #define mld_poly_uniform MLD_NAMESPACE(poly_uniform)
 /*************************************************
@@ -243,7 +257,8 @@ __contract__(
   ensures(array_bound(a->coeffs, 0, MLDSA_N, 0, MLDSA_Q))
 );
 
-#if !defined(MLD_CONFIG_SERIAL_FIPS202_ONLY) && !defined(MLD_CONFIG_REDUCE_RAM)
+#if !defined(MLD_CONFIG_SERIAL_FIPS202_ONLY) && \
+    (!defined(MLD_CONFIG_REDUCE_RAM) || defined(MLD_UNIT_TEST))
 #define mld_poly_uniform_4x MLD_NAMESPACE(poly_uniform_4x)
 /*************************************************
  * Name:        mld_poly_uniform_x4
@@ -277,8 +292,10 @@ __contract__(
   ensures(array_bound(vec2->coeffs, 0, MLDSA_N, 0, MLDSA_Q))
   ensures(array_bound(vec3->coeffs, 0, MLDSA_N, 0, MLDSA_Q))
 );
-#endif /* !MLD_CONFIG_SERIAL_FIPS202_ONLY && !MLD_CONFIG_REDUCE_RAM */
+#endif /* !MLD_CONFIG_SERIAL_FIPS202_ONLY && (!MLD_CONFIG_REDUCE_RAM || \
+          MLD_UNIT_TEST) */
 
+#if !defined(MLD_CONFIG_NO_KEYPAIR_API)
 #define mld_polyt1_pack MLD_NAMESPACE(polyt1_pack)
 /*************************************************
  * Name:        mld_polyt1_pack
@@ -298,7 +315,9 @@ __contract__(
   requires(array_bound(a->coeffs, 0, MLDSA_N, 0, 1 << 10))
   assigns(memory_slice(r, MLDSA_POLYT1_PACKEDBYTES))
 );
+#endif /* !MLD_CONFIG_NO_KEYPAIR_API */
 
+#if !defined(MLD_CONFIG_NO_VERIFY_API)
 #define mld_polyt1_unpack MLD_NAMESPACE(polyt1_unpack)
 /*************************************************
  * Name:        mld_polyt1_unpack
@@ -317,7 +336,9 @@ __contract__(
   assigns(memory_slice(r, sizeof(mld_poly)))
   ensures(array_bound(r->coeffs, 0, MLDSA_N, 0, 1 << 10))
 );
+#endif /* !MLD_CONFIG_NO_VERIFY_API */
 
+#if !defined(MLD_CONFIG_NO_KEYPAIR_API)
 #define mld_polyt0_pack MLD_NAMESPACE(polyt0_pack)
 /*************************************************
  * Name:        mld_polyt0_pack
@@ -337,8 +358,9 @@ __contract__(
   requires(array_bound(a->coeffs, 0, MLDSA_N, -(1<<(MLDSA_D-1)) + 1, (1<<(MLDSA_D-1)) + 1))
   assigns(memory_slice(r, MLDSA_POLYT0_PACKEDBYTES))
 );
+#endif /* !MLD_CONFIG_NO_KEYPAIR_API */
 
-
+#if !defined(MLD_CONFIG_NO_KEYPAIR_API) || !defined(MLD_CONFIG_NO_SIGN_API)
 #define mld_polyt0_unpack MLD_NAMESPACE(polyt0_unpack)
 /*************************************************
  * Name:        mld_polyt0_unpack
@@ -357,6 +379,7 @@ __contract__(
   assigns(memory_slice(r, sizeof(mld_poly)))
   ensures(array_bound(r->coeffs, 0, MLDSA_N, -(1<<(MLDSA_D-1)) + 1, (1<<(MLDSA_D-1)) + 1))
 );
+#endif /* !MLD_CONFIG_NO_KEYPAIR_API || !MLD_CONFIG_NO_SIGN_API */
 
 #define mld_poly_chknorm MLD_NAMESPACE(poly_chknorm)
 /*************************************************
@@ -381,6 +404,7 @@ __contract__(
  *
  **************************************************/
 MLD_INTERNAL_API
+MLD_MUST_CHECK_RETURN_VALUE
 uint32_t mld_poly_chknorm(const mld_poly *a, int32_t B)
 __contract__(
   requires(memory_no_alias(a, sizeof(mld_poly)))

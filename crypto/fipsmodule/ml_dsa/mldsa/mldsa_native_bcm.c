@@ -65,10 +65,13 @@
 #include "poly.c"
 #include "poly_kl.c"
 #include "polyvec.c"
+#include "polyvec_lazy.c"
 #include "sign.c"
 
 
 #if defined(MLD_CONFIG_USE_NATIVE_BACKEND_ARITH)
+#if defined(MLD_SYS_AARCH64)
+#endif /* MLD_SYS_AARCH64 */
 #if defined(MLD_SYS_X86_64)
 #include "native/x86_64/src/consts.c"
 #endif /* MLD_SYS_X86_64 */
@@ -142,6 +145,7 @@
 #undef MLD_ERR_RNG_FAIL
 #undef MLD_H
 #undef MLD_MAX3_
+#undef MLD_MAX4_
 #undef MLD_PREHASH_NONE
 #undef MLD_PREHASH_SHA2_224
 #undef MLD_PREHASH_SHA2_256
@@ -159,18 +163,21 @@
 #undef MLD_TOTAL_ALLOC_44_KEYPAIR
 #undef MLD_TOTAL_ALLOC_44_KEYPAIR_NO_PCT
 #undef MLD_TOTAL_ALLOC_44_KEYPAIR_PCT
+#undef MLD_TOTAL_ALLOC_44_PK_FROM_SK
 #undef MLD_TOTAL_ALLOC_44_SIGN
 #undef MLD_TOTAL_ALLOC_44_VERIFY
 #undef MLD_TOTAL_ALLOC_65
 #undef MLD_TOTAL_ALLOC_65_KEYPAIR
 #undef MLD_TOTAL_ALLOC_65_KEYPAIR_NO_PCT
 #undef MLD_TOTAL_ALLOC_65_KEYPAIR_PCT
+#undef MLD_TOTAL_ALLOC_65_PK_FROM_SK
 #undef MLD_TOTAL_ALLOC_65_SIGN
 #undef MLD_TOTAL_ALLOC_65_VERIFY
 #undef MLD_TOTAL_ALLOC_87
 #undef MLD_TOTAL_ALLOC_87_KEYPAIR
 #undef MLD_TOTAL_ALLOC_87_KEYPAIR_NO_PCT
 #undef MLD_TOTAL_ALLOC_87_KEYPAIR_PCT
+#undef MLD_TOTAL_ALLOC_87_PK_FROM_SK
 #undef MLD_TOTAL_ALLOC_87_SIGN
 #undef MLD_TOTAL_ALLOC_87_VERIFY
 #undef crypto_sign
@@ -182,6 +189,7 @@
 #undef MLD_ADD_PARAM_SET
 #undef MLD_ALLOC
 #undef MLD_APPLY
+#undef MLD_ASM_FN_SIZE
 #undef MLD_ASM_FN_SYMBOL
 #undef MLD_ASM_NAMESPACE
 #undef MLD_BUILD_INTERNAL
@@ -207,22 +215,25 @@
 #undef MLD_FIPS202_HEADER_FILE
 #undef MLD_FREE
 #undef MLD_INTERNAL_API
+#undef MLD_INTERNAL_DATA_DECLARATION
+#undef MLD_INTERNAL_DATA_DEFINITION
 #undef MLD_MULTILEVEL_BUILD
 #undef MLD_NAMESPACE
 #undef MLD_NAMESPACE_KL
 #undef MLD_NAMESPACE_PREFIX
 #undef MLD_NAMESPACE_PREFIX_KL
-#undef MLK_UNION_OR_STRUCT
 #undef mld_memcpy
 #undef mld_memset
 /* mldsa/src/packing.h */
 #undef MLD_PACKING_H
 #undef mld_pack_pk
-#undef mld_pack_sig_c_h
+#undef mld_pack_sig_c
+#undef mld_pack_sig_h_poly
 #undef mld_pack_sig_z
-#undef mld_pack_sk
-#undef mld_unpack_pk
-#undef mld_unpack_sig
+#undef mld_pack_sk_rho_key_tr_s2_t0
+#undef mld_pack_sk_s1
+#undef mld_sig_unpack_hints
+#undef mld_unpack_pk_t1
 #undef mld_unpack_sk
 /* mldsa/src/params.h */
 #undef MLDSA_BETA
@@ -270,29 +281,20 @@
 #undef mld_polyz_unpack
 /* mldsa/src/polyvec.h */
 #undef MLD_POLYVEC_H
-#undef mld_polymat
-#undef mld_polymat_get_row
-#undef mld_polyvec_matrix_expand
-#undef mld_polyvec_matrix_pointwise_montgomery
 #undef mld_polyveck
 #undef mld_polyveck_add
 #undef mld_polyveck_caddq
 #undef mld_polyveck_chknorm
 #undef mld_polyveck_decompose
 #undef mld_polyveck_invntt_tomont
-#undef mld_polyveck_make_hint
 #undef mld_polyveck_ntt
 #undef mld_polyveck_pack_eta
 #undef mld_polyveck_pack_t0
 #undef mld_polyveck_pack_w1
-#undef mld_polyveck_pointwise_poly_montgomery
 #undef mld_polyveck_power2round
 #undef mld_polyveck_reduce
-#undef mld_polyveck_shiftl
-#undef mld_polyveck_sub
 #undef mld_polyveck_unpack_eta
 #undef mld_polyveck_unpack_t0
-#undef mld_polyveck_use_hint
 #undef mld_polyvecl
 #undef mld_polyvecl_chknorm
 #undef mld_polyvecl_ntt
@@ -301,6 +303,58 @@
 #undef mld_polyvecl_uniform_gamma1
 #undef mld_polyvecl_unpack_eta
 #undef mld_polyvecl_unpack_z
+/* mldsa/src/polyvec_lazy.h */
+#undef MLD_POLYVEC_LAZY_H
+#undef mld_poly_permute_bitrev_to_custom_optional
+#undef mld_polymat
+#undef mld_polymat_eager
+#undef mld_polymat_lazy
+#undef mld_polyvec_matrix_expand
+#undef mld_polyvec_matrix_expand_eager
+#undef mld_polyvec_matrix_expand_lazy
+#undef mld_polyvec_matrix_pointwise_montgomery
+#undef mld_polyvec_matrix_pointwise_montgomery_row
+#undef mld_polyvec_matrix_pointwise_montgomery_row_eager
+#undef mld_polyvec_matrix_pointwise_montgomery_row_lazy
+#undef mld_polyvec_matrix_pointwise_montgomery_yvec
+#undef mld_polyvec_matrix_pointwise_montgomery_yvec_eager
+#undef mld_polyvec_matrix_pointwise_montgomery_yvec_lazy
+#undef mld_sk_s1hat
+#undef mld_sk_s1hat_eager
+#undef mld_sk_s1hat_get_poly
+#undef mld_sk_s1hat_get_poly_eager
+#undef mld_sk_s1hat_get_poly_lazy
+#undef mld_sk_s1hat_lazy
+#undef mld_sk_s2hat
+#undef mld_sk_s2hat_eager
+#undef mld_sk_s2hat_get_poly
+#undef mld_sk_s2hat_get_poly_eager
+#undef mld_sk_s2hat_get_poly_lazy
+#undef mld_sk_s2hat_lazy
+#undef mld_sk_t0hat
+#undef mld_sk_t0hat_eager
+#undef mld_sk_t0hat_get_poly
+#undef mld_sk_t0hat_get_poly_eager
+#undef mld_sk_t0hat_get_poly_lazy
+#undef mld_sk_t0hat_lazy
+#undef mld_unpack_sk_s1hat
+#undef mld_unpack_sk_s1hat_eager
+#undef mld_unpack_sk_s1hat_lazy
+#undef mld_unpack_sk_s2hat
+#undef mld_unpack_sk_s2hat_eager
+#undef mld_unpack_sk_s2hat_lazy
+#undef mld_unpack_sk_t0hat
+#undef mld_unpack_sk_t0hat_eager
+#undef mld_unpack_sk_t0hat_lazy
+#undef mld_yvec
+#undef mld_yvec_eager
+#undef mld_yvec_get_poly
+#undef mld_yvec_get_poly_eager
+#undef mld_yvec_get_poly_lazy
+#undef mld_yvec_init
+#undef mld_yvec_init_eager
+#undef mld_yvec_init_lazy
+#undef mld_yvec_lazy
 /* mldsa/src/rounding.h */
 #undef MLD_2_POW_D
 #undef MLD_ROUNDING_H
@@ -425,6 +479,7 @@
 #undef MLD_SYS_AARCH64
 #undef MLD_SYS_AARCH64_EB
 #undef MLD_SYS_APPLE
+#undef MLD_SYS_ARMV81M_MVE
 #undef MLD_SYS_BIG_ENDIAN
 #undef MLD_SYS_H
 #undef MLD_SYS_LINUX
@@ -432,6 +487,7 @@
 #undef MLD_SYS_PPC64LE
 #undef MLD_SYS_RISCV32
 #undef MLD_SYS_RISCV64
+#undef MLD_SYS_RISCV64_RVV
 #undef MLD_SYS_WINDOWS
 #undef MLD_SYS_X86_64
 #undef MLD_SYS_X86_64_AVX2
@@ -448,9 +504,51 @@
 #undef MLD_NATIVE_FUNC_FALLBACK
 #undef MLD_NATIVE_FUNC_SUCCESS
 #undef MLD_NTT_BOUND
-#undef REDUCE32_RANGE_MAX
+#undef MLD_REDUCE32_RANGE_MAX
 /* mldsa/src/native/meta.h */
 #undef MLD_NATIVE_META_H
+#if defined(MLD_SYS_AARCH64)
+/*
+ * Undefine macros from native code (Arith, AArch64)
+ */
+/* mldsa/src/native/aarch64/meta.h */
+#undef MLD_ARITH_BACKEND_AARCH64
+#undef MLD_NATIVE_AARCH64_META_H
+#undef MLD_USE_NATIVE_INTT
+#undef MLD_USE_NATIVE_NTT
+#undef MLD_USE_NATIVE_POINTWISE_MONTGOMERY
+#undef MLD_USE_NATIVE_POLYVECL_POINTWISE_ACC_MONTGOMERY_L4
+#undef MLD_USE_NATIVE_POLYVECL_POINTWISE_ACC_MONTGOMERY_L5
+#undef MLD_USE_NATIVE_POLYVECL_POINTWISE_ACC_MONTGOMERY_L7
+/* mldsa/src/native/aarch64/src/arith_native_aarch64.h */
+#undef MLD_AARCH64_REJ_UNIFORM_ETA2_BUFLEN
+#undef MLD_AARCH64_REJ_UNIFORM_ETA4_BUFLEN
+#undef MLD_NATIVE_AARCH64_SRC_ARITH_NATIVE_AARCH64_H
+#undef mld_aarch64_intt_zetas_layer123456
+#undef mld_aarch64_intt_zetas_layer78
+#undef mld_aarch64_ntt_zetas_layer123456
+#undef mld_aarch64_ntt_zetas_layer78
+#undef mld_intt_asm
+#undef mld_ntt_asm
+#undef mld_poly_caddq_asm
+#undef mld_poly_chknorm_asm
+#undef mld_poly_decompose_32_asm
+#undef mld_poly_decompose_88_asm
+#undef mld_poly_pointwise_montgomery_asm
+#undef mld_poly_use_hint_32_asm
+#undef mld_poly_use_hint_88_asm
+#undef mld_polyvecl_pointwise_acc_montgomery_l4_asm
+#undef mld_polyvecl_pointwise_acc_montgomery_l5_asm
+#undef mld_polyvecl_pointwise_acc_montgomery_l7_asm
+#undef mld_polyz_unpack_17_asm
+#undef mld_polyz_unpack_17_indices
+#undef mld_polyz_unpack_19_asm
+#undef mld_polyz_unpack_19_indices
+#undef mld_rej_uniform_asm
+#undef mld_rej_uniform_eta2_asm
+#undef mld_rej_uniform_eta4_asm
+#undef mld_rej_uniform_eta_table
+#endif /* MLD_SYS_AARCH64 */
 #if defined(MLD_SYS_X86_64)
 /*
  * Undefine macros from native code (Arith, X86_64)

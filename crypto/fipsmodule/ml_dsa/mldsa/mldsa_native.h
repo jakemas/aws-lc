@@ -205,6 +205,7 @@ extern "C"
 {
 #endif
 
+#if !defined(MLD_CONFIG_NO_KEYPAIR_API)
 /*************************************************
  * Name:        crypto_sign_keypair_internal
  *
@@ -243,6 +244,7 @@ int MLD_API_NAMESPACE(keypair_internal)(
 #endif
 );
 
+#if !defined(MLD_CONFIG_CORE_API_ONLY)
 /*************************************************
  * Name:        crypto_sign_keypair
  *
@@ -276,7 +278,10 @@ int MLD_API_NAMESPACE(keypair)(
     MLD_CONFIG_CONTEXT_PARAMETER_TYPE context
 #endif
 );
+#endif /* !MLD_CONFIG_CORE_API_ONLY */
+#endif /* !MLD_CONFIG_NO_KEYPAIR_API */
 
+#if !defined(MLD_CONFIG_NO_SIGN_API)
 /*************************************************
  * Name:        crypto_sign_signature_internal
  *
@@ -323,6 +328,7 @@ int MLD_API_NAMESPACE(signature_internal)(
 #endif
 );
 
+#if !defined(MLD_CONFIG_CORE_API_ONLY)
 /*************************************************
  * Name:        crypto_sign_signature
  *
@@ -438,7 +444,10 @@ int MLD_API_NAMESPACE(sign)(
     MLD_CONFIG_CONTEXT_PARAMETER_TYPE context
 #endif
 );
+#endif /* !MLD_CONFIG_CORE_API_ONLY */
+#endif /* !MLD_CONFIG_NO_SIGN_API */
 
+#if !defined(MLD_CONFIG_NO_VERIFY_API)
 /*************************************************
  * Name:        crypto_sign_verify_internal
  *
@@ -477,6 +486,7 @@ int MLD_API_NAMESPACE(verify_internal)(
 #endif
 );
 
+#if !defined(MLD_CONFIG_CORE_API_ONLY)
 /*************************************************
  * Name:        crypto_sign_verify
  *
@@ -581,6 +591,8 @@ int MLD_API_NAMESPACE(open)(
     MLD_CONFIG_CONTEXT_PARAMETER_TYPE context
 #endif
 );
+#endif /* !MLD_CONFIG_CORE_API_ONLY */
+#endif /* !MLD_CONFIG_NO_VERIFY_API */
 
 /*************************************************
  * Hash algorithm constants for domain separation
@@ -599,6 +611,8 @@ int MLD_API_NAMESPACE(open)(
 #define MLD_PREHASH_SHAKE_128 11
 #define MLD_PREHASH_SHAKE_256 12
 
+#if !defined(MLD_CONFIG_CORE_API_ONLY)
+#if !defined(MLD_CONFIG_NO_SIGN_API)
 /*************************************************
  * Name:        crypto_sign_signature_pre_hash_internal
  *
@@ -647,7 +661,9 @@ int MLD_API_NAMESPACE(signature_pre_hash_internal)(
     MLD_CONFIG_CONTEXT_PARAMETER_TYPE context
 #endif
 );
+#endif /* !MLD_CONFIG_NO_SIGN_API */
 
+#if !defined(MLD_CONFIG_NO_VERIFY_API)
 /*************************************************
  * Name:        crypto_sign_verify_pre_hash_internal
  *
@@ -691,7 +707,9 @@ int MLD_API_NAMESPACE(verify_pre_hash_internal)(
     MLD_CONFIG_CONTEXT_PARAMETER_TYPE context
 #endif
 );
+#endif /* !MLD_CONFIG_NO_VERIFY_API */
 
+#if !defined(MLD_CONFIG_NO_SIGN_API)
 /*************************************************
  * Name:        crypto_sign_signature_pre_hash_shake256
  *
@@ -731,7 +749,9 @@ int MLD_API_NAMESPACE(signature_pre_hash_shake256)(
     MLD_CONFIG_CONTEXT_PARAMETER_TYPE context
 #endif
 );
+#endif /* !MLD_CONFIG_NO_SIGN_API */
 
+#if !defined(MLD_CONFIG_NO_VERIFY_API)
 /*************************************************
  * Name:        crypto_sign_verify_pre_hash_shake256
  *
@@ -767,10 +787,13 @@ int MLD_API_NAMESPACE(verify_pre_hash_shake256)(
     MLD_CONFIG_CONTEXT_PARAMETER_TYPE context
 #endif
 );
+#endif /* !MLD_CONFIG_NO_VERIFY_API */
+#endif /* !MLD_CONFIG_CORE_API_ONLY */
 
 /* Maximum formatted domain separation message length */
 #define MLD_DOMAIN_SEPARATION_MAX_BYTES (2 + 255 + 11 + 64)
 
+#if !defined(MLD_CONFIG_CORE_API_ONLY)
 /*************************************************
  * Name:        mld_prepare_domain_separation_prefix
  *
@@ -815,6 +838,7 @@ size_t MLD_API_NAMESPACE(prepare_domain_separation_prefix)(
     uint8_t prefix[MLD_DOMAIN_SEPARATION_MAX_BYTES], const uint8_t *ph,
     size_t phlen, const uint8_t *ctx, size_t ctxlen, int hashalg);
 
+#if !defined(MLD_CONFIG_NO_KEYPAIR_API)
 /*************************************************
  * Name:        crypto_sign_pk_from_sk
  *
@@ -850,6 +874,8 @@ int MLD_API_NAMESPACE(pk_from_sk)(
     MLD_CONFIG_CONTEXT_PARAMETER_TYPE context
 #endif
 );
+#endif /* !MLD_CONFIG_NO_KEYPAIR_API */
+#endif /* !MLD_CONFIG_CORE_API_ONLY */
 
 #ifdef __cplusplus
 }
@@ -912,31 +938,37 @@ int MLD_API_NAMESPACE(pk_from_sk)(
  */
 /* check-magic: off */
 #if defined(MLD_API_LEGACY_CONFIG) || !defined(MLD_CONFIG_REDUCE_RAM)
-#define MLD_TOTAL_ALLOC_44_KEYPAIR_NO_PCT 45248
-#define MLD_TOTAL_ALLOC_44_KEYPAIR_PCT 56640
-#define MLD_TOTAL_ALLOC_44_SIGN 52896
-#define MLD_TOTAL_ALLOC_44_VERIFY 38816
-#define MLD_TOTAL_ALLOC_65_KEYPAIR_NO_PCT 71872
-#define MLD_TOTAL_ALLOC_65_KEYPAIR_PCT 85856
-#define MLD_TOTAL_ALLOC_65_SIGN 80576
-#define MLD_TOTAL_ALLOC_65_VERIFY 62432
-#define MLD_TOTAL_ALLOC_87_KEYPAIR_NO_PCT 112832
-#define MLD_TOTAL_ALLOC_87_KEYPAIR_PCT 130816
-#define MLD_TOTAL_ALLOC_87_SIGN 123584
-#define MLD_TOTAL_ALLOC_87_VERIFY 99552
+#define MLD_TOTAL_ALLOC_44_KEYPAIR_NO_PCT 28960
+#define MLD_TOTAL_ALLOC_44_KEYPAIR_PCT 48480
+#define MLD_TOTAL_ALLOC_44_PK_FROM_SK 37056
+#define MLD_TOTAL_ALLOC_44_SIGN 44704
+#define MLD_TOTAL_ALLOC_44_VERIFY 24448
+#define MLD_TOTAL_ALLOC_65_KEYPAIR_NO_PCT 49440
+#define MLD_TOTAL_ALLOC_65_KEYPAIR_PCT 74624
+#define MLD_TOTAL_ALLOC_65_PK_FROM_SK 60608
+#define MLD_TOTAL_ALLOC_65_SIGN 69312
+#define MLD_TOTAL_ALLOC_65_VERIFY 39872
+#define MLD_TOTAL_ALLOC_87_KEYPAIR_NO_PCT 82208
+#define MLD_TOTAL_ALLOC_87_KEYPAIR_PCT 115488
+#define MLD_TOTAL_ALLOC_87_PK_FROM_SK 97472
+#define MLD_TOTAL_ALLOC_87_SIGN 108224
+#define MLD_TOTAL_ALLOC_87_VERIFY 68800
 #else /* MLD_API_LEGACY_CONFIG || !MLD_CONFIG_REDUCE_RAM */
-#define MLD_TOTAL_ALLOC_44_KEYPAIR_NO_PCT 32992
-#define MLD_TOTAL_ALLOC_44_KEYPAIR_PCT 36192
-#define MLD_TOTAL_ALLOC_44_SIGN 32448
-#define MLD_TOTAL_ALLOC_44_VERIFY 22464
-#define MLD_TOTAL_ALLOC_65_KEYPAIR_NO_PCT 46304
-#define MLD_TOTAL_ALLOC_65_KEYPAIR_PCT 50048
-#define MLD_TOTAL_ALLOC_65_SIGN 44768
-#define MLD_TOTAL_ALLOC_65_VERIFY 30720
-#define MLD_TOTAL_ALLOC_87_KEYPAIR_NO_PCT 62688
-#define MLD_TOTAL_ALLOC_87_KEYPAIR_PCT 66336
-#define MLD_TOTAL_ALLOC_87_SIGN 59104
-#define MLD_TOTAL_ALLOC_87_VERIFY 41216
+#define MLD_TOTAL_ALLOC_44_KEYPAIR_NO_PCT 13632
+#define MLD_TOTAL_ALLOC_44_KEYPAIR_PCT 16896
+#define MLD_TOTAL_ALLOC_44_PK_FROM_SK 21728
+#define MLD_TOTAL_ALLOC_44_SIGN 13120
+#define MLD_TOTAL_ALLOC_44_VERIFY 9120
+#define MLD_TOTAL_ALLOC_65_KEYPAIR_NO_PCT 19776
+#define MLD_TOTAL_ALLOC_65_KEYPAIR_PCT 22560
+#define MLD_TOTAL_ALLOC_65_PK_FROM_SK 30944
+#define MLD_TOTAL_ALLOC_65_SIGN 17248
+#define MLD_TOTAL_ALLOC_65_VERIFY 10208
+#define MLD_TOTAL_ALLOC_87_KEYPAIR_NO_PCT 25920
+#define MLD_TOTAL_ALLOC_87_KEYPAIR_PCT 28608
+#define MLD_TOTAL_ALLOC_87_PK_FROM_SK 41184
+#define MLD_TOTAL_ALLOC_87_SIGN 21344
+#define MLD_TOTAL_ALLOC_87_VERIFY 12512
 #endif /* !(MLD_API_LEGACY_CONFIG || !MLD_CONFIG_REDUCE_RAM) */
 /* check-magic: on */
 
@@ -957,19 +989,20 @@ int MLD_API_NAMESPACE(pk_from_sk)(
 
 #define MLD_MAX3_(a, b, c) \
   ((a) > (b) ? ((a) > (c) ? (a) : (c)) : ((b) > (c) ? (b) : (c)))
+#define MLD_MAX4_(a, b, c, d) MLD_MAX3_((a), (b), MLD_MAX3_((c), (d), (d)))
 
 /*
- * `MLD_TOTAL_ALLOC_{44,65,87}` is the maximum across all operations for each
- * parameter set.
+ * `MLD_TOTAL_ALLOC_{44,65,87}` is the maximum across standard API operations
+ * (keygen, sign, verify) for each parameter set.
  */
-#define MLD_TOTAL_ALLOC_44                                       \
-  MLD_MAX3_(MLD_TOTAL_ALLOC_44_KEYPAIR, MLD_TOTAL_ALLOC_44_SIGN, \
-            MLD_TOTAL_ALLOC_44_VERIFY)
-#define MLD_TOTAL_ALLOC_65                                       \
-  MLD_MAX3_(MLD_TOTAL_ALLOC_65_KEYPAIR, MLD_TOTAL_ALLOC_65_SIGN, \
-            MLD_TOTAL_ALLOC_65_VERIFY)
-#define MLD_TOTAL_ALLOC_87                                       \
-  MLD_MAX3_(MLD_TOTAL_ALLOC_87_KEYPAIR, MLD_TOTAL_ALLOC_87_SIGN, \
-            MLD_TOTAL_ALLOC_87_VERIFY)
+#define MLD_TOTAL_ALLOC_44                                             \
+  MLD_MAX4_(MLD_TOTAL_ALLOC_44_KEYPAIR, MLD_TOTAL_ALLOC_44_PK_FROM_SK, \
+            MLD_TOTAL_ALLOC_44_SIGN, MLD_TOTAL_ALLOC_44_VERIFY)
+#define MLD_TOTAL_ALLOC_65                                             \
+  MLD_MAX4_(MLD_TOTAL_ALLOC_65_KEYPAIR, MLD_TOTAL_ALLOC_65_PK_FROM_SK, \
+            MLD_TOTAL_ALLOC_65_SIGN, MLD_TOTAL_ALLOC_65_VERIFY)
+#define MLD_TOTAL_ALLOC_87                                             \
+  MLD_MAX4_(MLD_TOTAL_ALLOC_87_KEYPAIR, MLD_TOTAL_ALLOC_87_PK_FROM_SK, \
+            MLD_TOTAL_ALLOC_87_SIGN, MLD_TOTAL_ALLOC_87_VERIFY)
 
 #endif /* !MLD_H */

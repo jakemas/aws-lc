@@ -24,8 +24,7 @@
  *   https://pq-crystals.org/dilithium/data/dilithium-specification-round3-20210208.pdf
  */
 
-#include <stdint.h>
-#include <string.h>
+#include "sign.h"
 
 #include "cbmc.h"
 #include "ct.h"
@@ -35,7 +34,6 @@
 #include "poly_kl.h"
 #include "polyvec.h"
 #include "randombytes.h"
-#include "sign.h"
 #include "symmetric.h"
 
 /* Parameter set namespacing
@@ -56,6 +54,7 @@
 /* End of parameter set namespacing */
 
 
+#if !defined(MLD_CONFIG_NO_KEYPAIR_API)
 static int mld_check_pct(uint8_t const pk[MLDSA_CRYPTO_PUBLICKEYBYTES],
                          uint8_t const sk[MLDSA_CRYPTO_SECRETKEYBYTES],
                          MLD_CONFIG_CONTEXT_PARAMETER_TYPE context)
@@ -63,8 +62,8 @@ __contract__(
   requires(memory_no_alias(pk, MLDSA_CRYPTO_PUBLICKEYBYTES))
   requires(memory_no_alias(sk, MLDSA_CRYPTO_SECRETKEYBYTES))
   ensures(return_value == 0
-	  || return_value == MLD_ERR_FAIL
-	  || return_value == MLD_ERR_OUT_OF_MEMORY
+    || return_value == MLD_ERR_FAIL
+    || return_value == MLD_ERR_OUT_OF_MEMORY
     || return_value == MLD_ERR_RNG_FAIL)
 );
 
@@ -210,39 +209,21 @@ __contract__(
  *              - uint8_t tr[MLDSA_TRBYTES]: output tr
  *              - uint8_t pk[MLDSA_CRYPTO_PUBLICKEYBYTES]: output public key
  *              - const uint8_t rho[MLDSA_SEEDBYTES]: input rho
- *              - const mld_polyvecl *s1: input s1
+ *              - mld_polyvecl *s1: input s1
  *              - const mld_polyveck *s2: input s2
  **************************************************/
 MLD_MUST_CHECK_RETURN_VALUE
 static int mld_compute_t0_t1_tr_from_sk_components(
     mld_polyveck *t0, mld_polyveck *t1, uint8_t tr[MLDSA_TRBYTES],
     uint8_t pk[MLDSA_CRYPTO_PUBLICKEYBYTES], const uint8_t rho[MLDSA_SEEDBYTES],
-    const mld_polyvecl *s1, const mld_polyveck *s2,
+    mld_polyvecl *s1, const mld_polyveck *s2,
     MLD_CONFIG_CONTEXT_PARAMETER_TYPE context)
-__contract__(
-  requires(memory_no_alias(t0, sizeof(mld_polyveck)))
-  requires(memory_no_alias(t1, sizeof(mld_polyveck)))
-  requires(memory_no_alias(tr, MLDSA_TRBYTES))
-  requires(memory_no_alias(pk, MLDSA_CRYPTO_PUBLICKEYBYTES))
-  requires(memory_no_alias(rho, MLDSA_SEEDBYTES))
-  requires(memory_no_alias(s1, sizeof(mld_polyvecl)))
-  requires(memory_no_alias(s2, sizeof(mld_polyveck)))
-  requires(forall(l0, 0, MLDSA_L, array_bound(s1->vec[l0].coeffs, 0, MLDSA_N, MLD_POLYETA_UNPACK_LOWER_BOUND, MLDSA_ETA + 1)))
-  requires(forall(k0, 0, MLDSA_K, array_bound(s2->vec[k0].coeffs, 0, MLDSA_N, MLD_POLYETA_UNPACK_LOWER_BOUND, MLDSA_ETA + 1)))
-  assigns(memory_slice(t0, sizeof(mld_polyveck)))
-  assigns(memory_slice(t1, sizeof(mld_polyveck)))
-  assigns(memory_slice(tr, MLDSA_TRBYTES))
-  assigns(memory_slice(pk, MLDSA_CRYPTO_PUBLICKEYBYTES))
-  ensures(forall(k1, 0, MLDSA_K, array_bound(t0->vec[k1].coeffs, 0, MLDSA_N, -(1<<(MLDSA_D-1)) + 1, (1<<(MLDSA_D-1)) + 1)))
-  ensures(forall(k2, 0, MLDSA_K, array_bound(t1->vec[k2].coeffs, 0, MLDSA_N, 0, 1 << 10)))
-  ensures(return_value == 0 || return_value == MLD_ERR_OUT_OF_MEMORY))
 {
   int ret;
+  mld_polyveck *t = t0;
   MLD_ALLOC(mat, mld_polymat, 1, context);
-  MLD_ALLOC(s1hat, mld_polyvecl, 1, context);
-  MLD_ALLOC(t, mld_polyveck, 1, context);
 
-  if (mat == NULL || s1hat == NULL || t == NULL)
+  if (mat == NULL)
   {
     ret = MLD_ERR_OUT_OF_MEMORY;
     goto cleanup;
@@ -251,10 +232,11 @@ __contract__(
   /* Expand matrix */
   mld_polyvec_matrix_expand(mat, rho);
 
+  /* NTT s1 in-place */
+  mld_polyvecl_ntt(s1);
+
   /* Matrix-vector multiplication */
-  *s1hat = *s1;
-  mld_polyvecl_ntt(s1hat);
-  mld_polyvec_matrix_pointwise_montgomery(t, mat, s1hat);
+  mld_polyvec_matrix_pointwise_montgomery(t, mat, s1);
   mld_polyveck_invntt_tomont(t);
 
   /* Add error vector s2 */
@@ -283,8 +265,6 @@ __contract__(
 
 cleanup:
   /* @[FIPS204, Section 3.6.3] Destruction of intermediate values. */
-  MLD_FREE(t, mld_polyveck, 1, context);
-  MLD_FREE(s1hat, mld_polyvecl, 1, context);
   MLD_FREE(mat, mld_polymat, 1, context);
   return ret;
 }
@@ -298,16 +278,24 @@ int mld_sign_keypair_internal(uint8_t pk[MLDSA_CRYPTO_PUBLICKEYBYTES],
 {
   int ret;
   const uint8_t *rho, *rhoprime, *key;
+
+  typedef union
+  {
+    mld_polyveck t1;
+    mld_polyvecl s1;
+  } s1_t1_u;
+  mld_polyvecl *s1;
+  mld_polyveck *t1;
+
   MLD_ALLOC(seedbuf, uint8_t, 2 * MLDSA_SEEDBYTES + MLDSA_CRHBYTES, context);
   MLD_ALLOC(inbuf, uint8_t, MLDSA_SEEDBYTES + 2, context);
   MLD_ALLOC(tr, uint8_t, MLDSA_TRBYTES, context);
-  MLD_ALLOC(s1, mld_polyvecl, 1, context);
+  MLD_ALLOC(s1_t1, s1_t1_u, 1, context);
   MLD_ALLOC(s2, mld_polyveck, 1, context);
-  MLD_ALLOC(t1, mld_polyveck, 1, context);
   MLD_ALLOC(t0, mld_polyveck, 1, context);
 
-  if (seedbuf == NULL || inbuf == NULL || tr == NULL || s1 == NULL ||
-      s2 == NULL || t1 == NULL || t0 == NULL)
+  if (seedbuf == NULL || inbuf == NULL || tr == NULL || s1_t1 == NULL ||
+      s2 == NULL || t0 == NULL)
   {
     ret = MLD_ERR_OUT_OF_MEMORY;
     goto cleanup;
@@ -326,8 +314,14 @@ int mld_sign_keypair_internal(uint8_t pk[MLDSA_CRYPTO_PUBLICKEYBYTES],
   /* Constant time: rho is part of the public key and, hence, public. */
   MLD_CT_TESTING_DECLASSIFY(rho, MLDSA_SEEDBYTES);
 
+  s1 = &s1_t1->s1;
+  t1 = &s1_t1->t1;
+
   /* Sample s1 and s2 */
   mld_sample_s1_s2(s1, s2, rhoprime);
+
+  /* Pack s1 into sk before NTT */
+  mld_pack_sk_s1(sk, s1);
 
   /* Compute t0, t1, tr, and pk from rho, s1, s2 */
   ret = mld_compute_t0_t1_tr_from_sk_components(t0, t1, tr, pk, rho, s1, s2,
@@ -337,8 +331,8 @@ int mld_sign_keypair_internal(uint8_t pk[MLDSA_CRYPTO_PUBLICKEYBYTES],
     goto cleanup;
   }
 
-  /* Pack secret key */
-  mld_pack_sk(sk, rho, tr, key, t0, s1, s2);
+  /* Pack remaining secret key components */
+  mld_pack_sk_rho_key_tr_s2_t0(sk, rho, tr, key, t0, s2);
 
   /* Constant time: pk is the public key, inherently public data */
   MLD_CT_TESTING_DECLASSIFY(pk, MLDSA_CRYPTO_PUBLICKEYBYTES);
@@ -346,9 +340,8 @@ int mld_sign_keypair_internal(uint8_t pk[MLDSA_CRYPTO_PUBLICKEYBYTES],
 cleanup:
   /* @[FIPS204, Section 3.6.3] Destruction of intermediate values. */
   MLD_FREE(t0, mld_polyveck, 1, context);
-  MLD_FREE(t1, mld_polyveck, 1, context);
   MLD_FREE(s2, mld_polyveck, 1, context);
-  MLD_FREE(s1, mld_polyvecl, 1, context);
+  MLD_FREE(s1_t1, s1_t1_u, 1, context);
   MLD_FREE(tr, uint8_t, MLDSA_TRBYTES, context);
   MLD_FREE(inbuf, uint8_t, MLDSA_SEEDBYTES + 2, context);
   MLD_FREE(seedbuf, uint8_t, 2 * MLDSA_SEEDBYTES + MLDSA_CRHBYTES, context);
@@ -363,6 +356,7 @@ cleanup:
   return mld_check_pct(pk, sk, context);
 }
 
+#if !defined(MLD_CONFIG_CORE_API_ONLY)
 #if !defined(MLD_CONFIG_NO_RANDOMIZED_API)
 MLD_MUST_CHECK_RETURN_VALUE
 MLD_EXTERNAL_API
@@ -370,23 +364,33 @@ int mld_sign_keypair(uint8_t pk[MLDSA_CRYPTO_PUBLICKEYBYTES],
                      uint8_t sk[MLDSA_CRYPTO_SECRETKEYBYTES],
                      MLD_CONFIG_CONTEXT_PARAMETER_TYPE context)
 {
-  MLD_ALIGN uint8_t seed[MLDSA_SEEDBYTES];
   int ret;
+  MLD_ALLOC(seed, uint8_t, MLDSA_SEEDBYTES, context);
+
+  if (seed == NULL)
+  {
+    ret = MLD_ERR_OUT_OF_MEMORY;
+    goto cleanup;
+  }
+
   if (mld_randombytes(seed, MLDSA_SEEDBYTES) != 0)
   {
     ret = MLD_ERR_RNG_FAIL;
     goto cleanup;
   }
-  MLD_CT_TESTING_SECRET(seed, sizeof(seed));
+  MLD_CT_TESTING_SECRET(seed, MLDSA_SEEDBYTES);
   ret = mld_sign_keypair_internal(pk, sk, seed, context);
 
 cleanup:
   /* @[FIPS204, Section 3.6.3] Destruction of intermediate values. */
-  mld_zeroize(seed, sizeof(seed));
+  MLD_FREE(seed, uint8_t, MLDSA_SEEDBYTES, context);
   return ret;
 }
 #endif /* !MLD_CONFIG_NO_RANDOMIZED_API */
+#endif /* !MLD_CONFIG_CORE_API_ONLY */
+#endif /* !MLD_CONFIG_NO_KEYPAIR_API */
 
+#if !defined(MLD_CONFIG_NO_SIGN_API) || !defined(MLD_CONFIG_NO_VERIFY_API)
 /*************************************************
  * Name:        mld_H
  *
@@ -442,6 +446,18 @@ __contract__(
   /* @[FIPS204, Section 3.6.3] Destruction of intermediate values. */
   mld_zeroize(&state, sizeof(state));
 }
+#endif /* !MLD_CONFIG_NO_SIGN_API || !MLD_CONFIG_NO_VERIFY_API */
+
+#if !defined(MLD_CONFIG_NO_SIGN_API)
+/* Reference: The reference implementation does not explicitly check the
+ * maximum nonce value, but instead loops indefinitely (even when the nonce
+ * would overflow). Internally, sampling of y uses
+ * (nonceL), (nonceL+1), ... (nonce*L+L-1).
+ * Hence, there are no overflows if nonce < (UINT16_MAX - L)/L.
+ * Explicitly checking for this explicitly allows us to prove type-safety.
+ * Note that FIPS204 explicitly allows an upper-bound this loop of
+ * 814 (< (UINT16_MAX - L)/L) - see @[FIPS204, Appendix C]. */
+#define MLD_NONCE_UB ((UINT16_MAX - MLDSA_L) / MLDSA_L)
 
 /*************************************************
  * Name:        mld_compute_pack_z
@@ -452,8 +468,11 @@ __contract__(
  *
  * Arguments:   - uint8_t *sig: output signature
  *              - const mld_poly *cp: challenge polynomial
- *              - const polyvecl *s1: secret vector s1
- *              - const polyvecl *y: masking vector y
+ *              - const mld_sk_s1hat *s1hat: secret vector s1 in NTT domain
+ *              - const mld_yvec *y: masking vector y (or seed in REDUCE_RAM
+ * mode)
+ *              - mld_poly *z: scratch polynomial for z computation
+ *              - mld_poly *tmp: scratch polynomial
  *
  * Returns:     - 0: Success (z has coefficients smaller than
  *                   MLDSA_GAMMA1 - MLDSA_BETA,)
@@ -466,20 +485,29 @@ __contract__(
  **************************************************/
 MLD_MUST_CHECK_RETURN_VALUE
 static int mld_compute_pack_z(uint8_t sig[MLDSA_CRYPTO_BYTES],
-                              const mld_poly *cp, const mld_polyvecl *s1,
-                              const mld_polyvecl *y, mld_poly *z)
+                              const mld_poly *cp, const mld_sk_s1hat *s1hat,
+                              const mld_yvec *y, mld_poly *z, mld_poly *tmp)
 __contract__(
   requires(memory_no_alias(sig, MLDSA_CRYPTO_BYTES))
   requires(memory_no_alias(cp, sizeof(mld_poly)))
-  requires(memory_no_alias(s1, sizeof(mld_polyvecl)))
-  requires(memory_no_alias(y, sizeof(mld_polyvecl)))
+  requires(memory_no_alias(s1hat, sizeof(mld_sk_s1hat)))
+  requires(memory_no_alias(y, sizeof(mld_yvec)))
   requires(memory_no_alias(z, sizeof(mld_poly)))
+  requires(memory_no_alias(tmp, sizeof(mld_poly)))
   requires(array_abs_bound(cp->coeffs, 0, MLDSA_N, MLD_NTT_BOUND))
-  requires(forall(k0, 0, MLDSA_L,
-    array_bound(y->vec[k0].coeffs, 0, MLDSA_N, -(MLDSA_GAMMA1 - 1), MLDSA_GAMMA1 + 1)))
-  requires(forall(k1, 0, MLDSA_L, array_abs_bound(s1->vec[k1].coeffs, 0, MLDSA_N, MLD_NTT_BOUND)))
+  MLD_IF_NOT_REDUCE_RAM(
+    requires(forall(k0, 0, MLDSA_L,
+      array_bound(y->vec.vec[k0].coeffs, 0, MLDSA_N, -(MLDSA_GAMMA1 - 1), MLDSA_GAMMA1 + 1)))
+    requires(forall(k1, 0, MLDSA_L, array_abs_bound(s1hat->vec.vec[k1].coeffs, 0, MLDSA_N, MLD_NTT_BOUND)))
+  )
+  MLD_IF_REDUCE_RAM(
+    requires(memory_no_alias(s1hat->packed, MLDSA_L * MLDSA_POLYETA_PACKEDBYTES))
+    requires(memory_no_alias(y->rhoprime, MLDSA_CRHBYTES))
+    requires(y->nonce <= MLD_NONCE_UB)
+  )
   assigns(memory_slice(sig, MLDSA_CRYPTO_BYTES))
   assigns(memory_slice(z, sizeof(mld_poly)))
+  assigns(memory_slice(tmp, sizeof(mld_poly)))
   ensures(return_value == 0 || return_value == MLD_ERR_FAIL ||
           return_value == MLD_ERR_OUT_OF_MEMORY)
 )
@@ -488,13 +516,18 @@ __contract__(
   uint32_t z_invalid;
   for (i = 0; i < MLDSA_L; i++)
   __loop__(
-    assigns(i, memory_slice(z, sizeof(mld_poly)), memory_slice(sig, MLDSA_CRYPTO_BYTES))
+    assigns(i, memory_slice(z, sizeof(mld_poly)),
+            memory_slice(tmp, sizeof(mld_poly)),
+            memory_slice(sig, MLDSA_CRYPTO_BYTES))
     invariant(i <= MLDSA_L)
+    decreases(MLDSA_L - i)
   )
   {
-    mld_poly_pointwise_montgomery(z, cp, &s1->vec[i]);
+    mld_sk_s1hat_get_poly(z, s1hat, i);
+    mld_poly_pointwise_montgomery(z, cp);
     mld_poly_invntt_tomont(z);
-    mld_poly_add(z, &y->vec[i]);
+    mld_yvec_get_poly(tmp, y, i);
+    mld_poly_add(z, tmp);
     mld_poly_reduce(z);
 
     z_invalid = mld_poly_chknorm(z, MLDSA_GAMMA1 - MLDSA_BETA);
@@ -522,16 +555,6 @@ __contract__(
   return 0;
 }
 
-/* Reference: The reference implementation does not explicitly check the
- * maximum nonce value, but instead loops indefinitely (even when the nonce
- * would overflow). Internally, sampling of y uses
- * (nonceL), (nonceL+1), ... (nonce*L+L-1).
- * Hence, there are no overflows if nonce < (UINT16_MAX - L)/L.
- * Explicitly checking for this explicitly allows us to prove type-safety.
- * Note that FIPS204 explicitly allows an upper-bound this loop of
- * 814 (< (UINT16_MAX - L)/L) - see @[FIPS204, Appendix C]. */
-#define MLD_NONCE_UB ((UINT16_MAX - MLDSA_L) / MLDSA_L)
-
 /*************************************************
  * Name:        attempt_signature_generation
  *
@@ -543,9 +566,9 @@ __contract__(
  *              - const uint8_t *rhoprime: pointer to randomness seed
  *              - uint16_t nonce: current nonce value
  *              - const mld_polymat *mat: expanded matrix
- *              - const polyvecl *s1: secret vector s1
- *              - const polyveck *s2: secret vector s2
- *              - const polyveck *t0: vector t0
+ *              - const mld_sk_s1hat *s1hat: secret vector s1 in NTT domain
+ *              - const mld_sk_s2hat *s2hat: secret vector s2 in NTT domain
+ *              - const mld_sk_t0hat *t0hat: vector t0 in NTT domain
  *
  * Returns:     - 0: Signature generation succeeded
  *              - MLD_ERR_FAIL: Signature rejected (norm check failed)
@@ -561,79 +584,71 @@ MLD_MUST_CHECK_RETURN_VALUE
 static int mld_attempt_signature_generation(
     uint8_t sig[MLDSA_CRYPTO_BYTES], const uint8_t *mu,
     const uint8_t rhoprime[MLDSA_CRHBYTES], uint16_t nonce, mld_polymat *mat,
-    const mld_polyvecl *s1, const mld_polyveck *s2, const mld_polyveck *t0,
-    MLD_CONFIG_CONTEXT_PARAMETER_TYPE context)
+    const mld_sk_s1hat *s1hat, const mld_sk_s2hat *s2hat,
+    const mld_sk_t0hat *t0hat, MLD_CONFIG_CONTEXT_PARAMETER_TYPE context)
 __contract__(
   requires(memory_no_alias(sig, MLDSA_CRYPTO_BYTES))
   requires(memory_no_alias(mu, MLDSA_CRHBYTES))
   requires(memory_no_alias(rhoprime, MLDSA_CRHBYTES))
   requires(memory_no_alias(mat, sizeof(mld_polymat)))
-  requires(memory_no_alias(s1, sizeof(mld_polyvecl)))
-  requires(memory_no_alias(s2, sizeof(mld_polyveck)))
-  requires(memory_no_alias(t0, sizeof(mld_polyveck)))
+  requires(memory_no_alias(s1hat, sizeof(mld_sk_s1hat)))
+  requires(memory_no_alias(s2hat, sizeof(mld_sk_s2hat)))
+  requires(memory_no_alias(t0hat, sizeof(mld_sk_t0hat)))
   requires(nonce <= MLD_NONCE_UB)
-  requires(forall(k1, 0, MLDSA_K, forall(l1, 0, MLDSA_L,
-                                         array_bound(mat->vec[k1].vec[l1].coeffs, 0, MLDSA_N, 0, MLDSA_Q))))
-  requires(forall(k2, 0, MLDSA_K, array_abs_bound(t0->vec[k2].coeffs, 0, MLDSA_N, MLD_NTT_BOUND)))
-  requires(forall(k3, 0, MLDSA_L, array_abs_bound(s1->vec[k3].coeffs, 0, MLDSA_N, MLD_NTT_BOUND)))
-  requires(forall(k4, 0, MLDSA_K, array_abs_bound(s2->vec[k4].coeffs, 0, MLDSA_N, MLD_NTT_BOUND)))
+  MLD_IF_NOT_REDUCE_RAM(
+    requires(forall(k1, 0, MLDSA_K, forall(l1, 0, MLDSA_L,
+                                           array_bound(mat->vec[k1].vec[l1].coeffs, 0, MLDSA_N, 0, MLDSA_Q))))
+    requires(forall(k2, 0, MLDSA_K, array_abs_bound(t0hat->vec.vec[k2].coeffs, 0, MLDSA_N, MLD_NTT_BOUND)))
+    requires(forall(k3, 0, MLDSA_L, array_abs_bound(s1hat->vec.vec[k3].coeffs, 0, MLDSA_N, MLD_NTT_BOUND)))
+    requires(forall(k4, 0, MLDSA_K, array_abs_bound(s2hat->vec.vec[k4].coeffs, 0, MLDSA_N, MLD_NTT_BOUND)))
+  )
+  MLD_IF_REDUCE_RAM(
+    requires(memory_no_alias(s1hat->packed, MLDSA_L * MLDSA_POLYETA_PACKEDBYTES))
+    requires(memory_no_alias(s2hat->packed, MLDSA_K * MLDSA_POLYETA_PACKEDBYTES))
+    requires(memory_no_alias(t0hat->packed, MLDSA_K * MLDSA_POLYT0_PACKEDBYTES))
+  )
   assigns(memory_slice(sig, MLDSA_CRYPTO_BYTES))
+  MLD_IF_REDUCE_RAM(
+    assigns(memory_slice(mat, sizeof(mld_polymat)))
+  )
   ensures(return_value == 0 || return_value == MLD_ERR_FAIL ||
           return_value == MLD_ERR_OUT_OF_MEMORY)
 )
 {
-  unsigned int n;
+  unsigned int k, n;
   uint32_t w0_invalid, h_invalid;
   int ret;
-  /* TODO: Remove the following workaround for
-   * https://github.com/diffblue/cbmc/issues/8813 */
-  typedef MLK_UNION_OR_STRUCT
-  {
-    mld_polyvecl y;
-    mld_polyveck h;
-  }
-  yh_u;
-  mld_polyvecl *y;
-  mld_polyveck *h;
 
-  /* TODO: Remove the following workaround for
-   * https://github.com/diffblue/cbmc/issues/8813 */
-  typedef MLK_UNION_OR_STRUCT
+  typedef union
   {
     mld_polyveck w1;
     mld_polyvecl tmp;
-  }
-  w1tmp_u;
+  } w1tmp_u;
   mld_polyveck *w1;
   mld_polyvecl *tmp;
 
   MLD_ALLOC(challenge_bytes, uint8_t, MLDSA_CTILDEBYTES, context);
-  MLD_ALLOC(yh, yh_u, 1, context);
+  MLD_ALLOC(y, mld_yvec, 1, context);
   MLD_ALLOC(z, mld_poly, 1, context);
   MLD_ALLOC(w1tmp, w1tmp_u, 1, context);
   MLD_ALLOC(w0, mld_polyveck, 1, context);
   MLD_ALLOC(cp, mld_poly, 1, context);
   MLD_ALLOC(t, mld_poly, 1, context);
 
-  if (challenge_bytes == NULL || yh == NULL || z == NULL || w1tmp == NULL ||
+  if (challenge_bytes == NULL || y == NULL || z == NULL || w1tmp == NULL ||
       w0 == NULL || cp == NULL || t == NULL)
   {
     ret = MLD_ERR_OUT_OF_MEMORY;
     goto cleanup;
   }
-  y = &yh->y;
-  h = &yh->h;
   w1 = &w1tmp->w1;
   tmp = &w1tmp->tmp;
 
-  /* Sample intermediate vector y */
-  mld_polyvecl_uniform_gamma1(y, rhoprime, nonce);
+  /* Sample/initialize intermediate vector y */
+  mld_yvec_init(y, rhoprime, nonce);
 
-  /* Matrix-vector multiplication */
-  *tmp = *y;
-  mld_polyvecl_ntt(tmp);
-  mld_polyvec_matrix_pointwise_montgomery(w0, mat, tmp);
-  mld_polyveck_invntt_tomont(w0);
+  /* Matrix-vector multiplication, fused with y sampling in REDUCE_RAM mode */
+  mld_polyvec_matrix_pointwise_montgomery_yvec(w0, mat, y, tmp);
 
   /* Decompose w and call the random oracle */
   mld_polyveck_caddq(w0);
@@ -651,63 +666,109 @@ __contract__(
   mld_poly_ntt(cp);
 
   /* Compute z, reject if it reveals secret */
-  ret = mld_compute_pack_z(sig, cp, s1, y, t);
-  if (ret)
+  ret = mld_compute_pack_z(sig, cp, s1hat, y, t, z);
+  if (ret != 0)
   {
     goto cleanup;
   }
 
-  /* Check that subtracting cs2 does not change high bits of w and low bits
-   * do not reveal secret information */
-  mld_polyveck_pointwise_poly_montgomery(h, cp, s2);
-  mld_polyveck_invntt_tomont(h);
-  mld_polyveck_sub(w0, h);
-  mld_polyveck_reduce(w0);
-
-  w0_invalid = mld_polyveck_chknorm(w0, MLDSA_GAMMA2 - MLDSA_BETA);
-  /* Constant time: w0_invalid may be leaked - see comment for z_invalid. */
-  MLD_CT_TESTING_DECLASSIFY(&w0_invalid, sizeof(uint32_t));
-  if (w0_invalid)
+  /* Compute w0 - cs2 + ct0 per-component, checking norms incrementally.
+   * This avoids allocating a full polyveck for h. */
+  for (k = 0; k < MLDSA_K; k++)
+  __loop__(
+    assigns(k,
+            object_whole(z),
+            object_whole(t),
+            object_whole(w0))
+    invariant(k <= MLDSA_K)
+    invariant(forall(k0, k, MLDSA_K,
+      array_abs_bound(w0->vec[k0].coeffs, 0, MLDSA_N, MLDSA_GAMMA2 + 1)))
+    decreases(MLDSA_K - k)
+  )
   {
-    ret = MLD_ERR_FAIL; /* reject */
-    goto cleanup;
+    /* Compute cs2[k] and subtract from w0[k] */
+    mld_sk_s2hat_get_poly(z, s2hat, k);
+    mld_poly_pointwise_montgomery(z, cp);
+    mld_poly_invntt_tomont(z);
+
+    /* TODO: Remove this workaround for CBMC performance issues */
+    *t = w0->vec[k];
+    mld_poly_sub(t, z);
+    mld_poly_reduce(t);
+
+    /* Check that subtracting cs2 does not change high bits of w and low bits
+     * do not reveal secret information */
+    w0_invalid = mld_poly_chknorm(t, MLDSA_GAMMA2 - MLDSA_BETA);
+    w0->vec[k] = *t;
+    /* Constant time: w0_invalid may be leaked - see comment for z_invalid. */
+    MLD_CT_TESTING_DECLASSIFY(&w0_invalid, sizeof(uint32_t));
+    if (w0_invalid)
+    {
+      ret = MLD_ERR_FAIL; /* reject */
+      goto cleanup;
+    }
+
+    /* Compute ct0[k], check norm, and add to w0[k] */
+    mld_sk_t0hat_get_poly(z, t0hat, k);
+    mld_poly_pointwise_montgomery(z, cp);
+    mld_poly_invntt_tomont(z);
+    mld_poly_reduce(z);
+
+    h_invalid = mld_poly_chknorm(z, MLDSA_GAMMA2);
+    /* Constant time: h_invalid may be leaked - see comment for z_invalid. */
+    MLD_CT_TESTING_DECLASSIFY(&h_invalid, sizeof(uint32_t));
+    if (h_invalid)
+    {
+      ret = MLD_ERR_FAIL; /* reject */
+      goto cleanup;
+    }
+
+    /* TODO: Remove this workaround for CBMC performance issues */
+    *t = w0->vec[k];
+    mld_poly_add(t, z);
+    w0->vec[k] = *t;
   }
-
-  /* Compute hints for w1 */
-  mld_polyveck_pointwise_poly_montgomery(h, cp, t0);
-  mld_polyveck_invntt_tomont(h);
-  mld_polyveck_reduce(h);
-
-  h_invalid = mld_polyveck_chknorm(h, MLDSA_GAMMA2);
-  /* Constant time: h_invalid may be leaked - see comment for z_invalid. */
-  MLD_CT_TESTING_DECLASSIFY(&h_invalid, sizeof(uint32_t));
-  if (h_invalid)
-  {
-    ret = MLD_ERR_FAIL; /* reject */
-    goto cleanup;
-  }
-
-  mld_polyveck_add(w0, h);
 
   /* Constant time: At this point all norm checks have passed and we, hence,
    * know that the signature does not leak any secret information.
    * Consequently, any value that can be computed from the signature and public
    * key is considered public.
    * w0 and w1 are public as they can be computed from Az - ct = \alpha w1 + w0.
-   * h=c*t0 is public as both c and t0 are public.
-   * For a more detailed discussion, refer to https://eprint.iacr.org/2022/1406.
+   * h=c*t0 is public as both c and t0 are considered public.
+   * While t0 is not part of the public key, it can be reconstructed from
+   * a small number of signatures and need not be regarded as secret
+   * (see @[FIPS204, Section 6.1]).
    */
   MLD_CT_TESTING_DECLASSIFY(w0, sizeof(*w0));
   MLD_CT_TESTING_DECLASSIFY(w1, sizeof(*w1));
-  n = mld_polyveck_make_hint(h, w0, w1);
-  if (n > MLDSA_OMEGA)
+
+  /* Pack challenge bytes and initialize hint section */
+  mld_pack_sig_c(sig, challenge_bytes);
+  mld_memset(sig + MLDSA_CTILDEBYTES + MLDSA_L * MLDSA_POLYZ_PACKEDBYTES, 0,
+             MLDSA_POLYVECH_PACKEDBYTES);
+
+  /* Compute hints per-component and pack incrementally */
+  n = 0;
+  for (k = 0; k < MLDSA_K; k++)
+  __loop__(
+    assigns(k, n,
+            memory_slice(z, sizeof(mld_poly)),
+            memory_slice(sig, MLDSA_CRYPTO_BYTES))
+    invariant(k <= MLDSA_K)
+    invariant(n <= MLDSA_OMEGA)
+    decreases(MLDSA_K - k)
+  )
   {
-    ret = MLD_ERR_FAIL; /* reject */
-    goto cleanup;
+    unsigned int hints = mld_poly_make_hint(z, &w0->vec[k], &w1->vec[k]);
+    if (n + hints > MLDSA_OMEGA)
+    {
+      ret = MLD_ERR_FAIL; /* reject */
+      goto cleanup;
+    }
+    mld_pack_sig_h_poly(sig, z, k, n);
+    n += hints;
   }
 
-  /* All is well - write signature */
-  mld_pack_sig_c_h(sig, challenge_bytes, h, n);
   /* Constant time: At this point it is clear that the signature is valid - it
    * can, hence, be considered public. */
   MLD_CT_TESTING_DECLASSIFY(sig, MLDSA_CRYPTO_BYTES);
@@ -720,7 +781,7 @@ cleanup:
   MLD_FREE(w0, mld_polyveck, 1, context);
   MLD_FREE(w1tmp, w1tmp_u, 1, context);
   MLD_FREE(z, mld_poly, 1, context);
-  MLD_FREE(yh, yh_u, 1, context);
+  MLD_FREE(y, mld_yvec, 1, context);
   MLD_FREE(challenge_bytes, uint8_t, MLDSA_CTILDEBYTES, context);
 
   return ret;
@@ -741,11 +802,12 @@ int mld_sign_signature_internal(uint8_t sig[MLDSA_CRYPTO_BYTES], size_t *siglen,
   MLD_ALLOC(seedbuf, uint8_t,
             2 * MLDSA_SEEDBYTES + MLDSA_TRBYTES + 2 * MLDSA_CRHBYTES, context);
   MLD_ALLOC(mat, mld_polymat, 1, context);
-  MLD_ALLOC(s1, mld_polyvecl, 1, context);
-  MLD_ALLOC(t0, mld_polyveck, 1, context);
-  MLD_ALLOC(s2, mld_polyveck, 1, context);
+  MLD_ALLOC(s1hat, mld_sk_s1hat, 1, context);
+  MLD_ALLOC(t0hat, mld_sk_t0hat, 1, context);
+  MLD_ALLOC(s2hat, mld_sk_s2hat, 1, context);
 
-  if (seedbuf == NULL || mat == NULL || s1 == NULL || t0 == NULL || s2 == NULL)
+  if (seedbuf == NULL || mat == NULL || s1hat == NULL || t0hat == NULL ||
+      s2hat == NULL)
   {
     ret = MLD_ERR_OUT_OF_MEMORY;
     goto cleanup;
@@ -756,7 +818,7 @@ int mld_sign_signature_internal(uint8_t sig[MLDSA_CRYPTO_BYTES], size_t *siglen,
   key = tr + MLDSA_TRBYTES;
   mu = key + MLDSA_SEEDBYTES;
   rhoprime = mu + MLDSA_CRHBYTES;
-  mld_unpack_sk(rho, tr, key, t0, s1, s2, sk);
+  mld_unpack_sk(rho, tr, key, t0hat, s1hat, s2hat, sk);
 
   if (!externalmu)
   {
@@ -777,9 +839,6 @@ int mld_sign_signature_internal(uint8_t sig[MLDSA_CRYPTO_BYTES], size_t *siglen,
   MLD_CT_TESTING_DECLASSIFY(rho, MLDSA_SEEDBYTES);
   /* Expand matrix and transform vectors */
   mld_polyvec_matrix_expand(mat, rho);
-  mld_polyvecl_ntt(s1);
-  mld_polyveck_ntt(s2);
-  mld_polyveck_ntt(t0);
 
   /* By default, return failure. Flip to success and write output
    * once signature generation succeeds. */
@@ -790,18 +849,27 @@ int mld_sign_signature_internal(uint8_t sig[MLDSA_CRYPTO_BYTES], size_t *siglen,
   /* to implement rejection of invalid signatures.            */
   while (1)
   __loop__(
-    assigns(nonce, ret, object_whole(siglen), memory_slice(sig, MLDSA_CRYPTO_BYTES))
+    MLD_IF_NOT_REDUCE_RAM(
+      assigns(nonce, ret, object_whole(siglen), memory_slice(sig, MLDSA_CRYPTO_BYTES))
+    )
+    MLD_IF_REDUCE_RAM(
+      assigns(nonce, ret, object_whole(siglen), memory_slice(sig, MLDSA_CRYPTO_BYTES),
+              memory_slice(mat, sizeof(mld_polymat)))
+    )
     invariant(nonce <= MLD_NONCE_UB)
 
     /* t0, s1, s2, and mat are initialized above and are NOT changed by this */
     /* loop. We can therefore re-assert their bounds here as part of the     */
     /* loop invariant. This makes proof noticeably faster with CBMC          */
-    invariant(forall(k1, 0, MLDSA_K, forall(l1, 0, MLDSA_L,
-              array_bound(mat->vec[k1].vec[l1].coeffs, 0, MLDSA_N, 0, MLDSA_Q))))
-    invariant(forall(k2, 0, MLDSA_K, array_abs_bound(t0->vec[k2].coeffs, 0, MLDSA_N, MLD_NTT_BOUND)))
-    invariant(forall(k3, 0, MLDSA_L, array_abs_bound(s1->vec[k3].coeffs, 0, MLDSA_N, MLD_NTT_BOUND)))
-    invariant(forall(k4, 0, MLDSA_K, array_abs_bound(s2->vec[k4].coeffs, 0, MLDSA_N, MLD_NTT_BOUND)))
+    MLD_IF_NOT_REDUCE_RAM(
+      invariant(forall(k1, 0, MLDSA_K, forall(l1, 0, MLDSA_L,
+                array_bound(mat->vec[k1].vec[l1].coeffs, 0, MLDSA_N, 0, MLDSA_Q))))
+      invariant(forall(k2, 0, MLDSA_K, array_abs_bound(t0hat->vec.vec[k2].coeffs, 0, MLDSA_N, MLD_NTT_BOUND)))
+      invariant(forall(k3, 0, MLDSA_L, array_abs_bound(s1hat->vec.vec[k3].coeffs, 0, MLDSA_N, MLD_NTT_BOUND)))
+      invariant(forall(k4, 0, MLDSA_K, array_abs_bound(s2hat->vec.vec[k4].coeffs, 0, MLDSA_N, MLD_NTT_BOUND)))
+    )
     invariant(ret == MLD_ERR_FAIL)
+    decreases(MLD_NONCE_UB - nonce)
   )
   {
     /* Reference: this code explicitly checks for exhaustion of nonce     */
@@ -815,8 +883,8 @@ int mld_sign_signature_internal(uint8_t sig[MLDSA_CRYPTO_BYTES], size_t *siglen,
       break;
     }
 
-    ret = mld_attempt_signature_generation(sig, mu, rhoprime, nonce, mat, s1,
-                                           s2, t0, context);
+    ret = mld_attempt_signature_generation(sig, mu, rhoprime, nonce, mat, s1hat,
+                                           s2hat, t0hat, context);
     nonce++;
     if (ret == 0)
     {
@@ -842,15 +910,16 @@ cleanup:
   }
 
   /* @[FIPS204, Section 3.6.3] Destruction of intermediate values. */
-  MLD_FREE(s2, mld_polyveck, 1, context);
-  MLD_FREE(t0, mld_polyveck, 1, context);
-  MLD_FREE(s1, mld_polyvecl, 1, context);
+  MLD_FREE(s2hat, mld_sk_s2hat, 1, context);
+  MLD_FREE(t0hat, mld_sk_t0hat, 1, context);
+  MLD_FREE(s1hat, mld_sk_s1hat, 1, context);
   MLD_FREE(mat, mld_polymat, 1, context);
   MLD_FREE(seedbuf, uint8_t,
            2 * MLDSA_SEEDBYTES + MLDSA_TRBYTES + 2 * MLDSA_CRHBYTES, context);
   return ret;
 }
 
+#if !defined(MLD_CONFIG_CORE_API_ONLY)
 #if !defined(MLD_CONFIG_NO_RANDOMIZED_API)
 MLD_MUST_CHECK_RETURN_VALUE
 MLD_EXTERNAL_API
@@ -887,7 +956,7 @@ int mld_sign_signature(uint8_t sig[MLDSA_CRYPTO_BYTES], size_t *siglen,
     ret = MLD_ERR_RNG_FAIL;
     goto cleanup;
   }
-  MLD_CT_TESTING_SECRET(rnd, sizeof(rnd));
+  MLD_CT_TESTING_SECRET(rnd, MLDSA_RNDBYTES);
 
   ret = mld_sign_signature_internal(sig, siglen, m, mlen, pre, pre_len, rnd, sk,
                                     0, context);
@@ -921,8 +990,15 @@ int mld_sign_signature_extmu(uint8_t sig[MLDSA_CRYPTO_BYTES], size_t *siglen,
                              const uint8_t sk[MLDSA_CRYPTO_SECRETKEYBYTES],
                              MLD_CONFIG_CONTEXT_PARAMETER_TYPE context)
 {
-  MLD_ALIGN uint8_t rnd[MLDSA_RNDBYTES];
   int ret;
+  MLD_ALLOC(rnd, uint8_t, MLDSA_RNDBYTES, context);
+
+  if (rnd == NULL)
+  {
+    *siglen = 0;
+    ret = MLD_ERR_OUT_OF_MEMORY;
+    goto cleanup;
+  }
 
   /* Randomized variant of ML-DSA. If you need the deterministic variant,
    * call mld_sign_signature_internal directly with all-zero rnd. */
@@ -932,14 +1008,14 @@ int mld_sign_signature_extmu(uint8_t sig[MLDSA_CRYPTO_BYTES], size_t *siglen,
     ret = MLD_ERR_RNG_FAIL;
     goto cleanup;
   }
-  MLD_CT_TESTING_SECRET(rnd, sizeof(rnd));
+  MLD_CT_TESTING_SECRET(rnd, MLDSA_RNDBYTES);
 
   ret = mld_sign_signature_internal(sig, siglen, mu, MLDSA_CRHBYTES, NULL, 0,
                                     rnd, sk, 1, context);
 
 cleanup:
   /* @[FIPS204, Section 3.6.3] Destruction of intermediate values. */
-  mld_zeroize(rnd, sizeof(rnd));
+  MLD_FREE(rnd, uint8_t, MLDSA_RNDBYTES, context);
 
   return ret;
 }
@@ -960,17 +1036,24 @@ int mld_sign(uint8_t *sm, size_t *smlen, const uint8_t *m, size_t mlen,
   __loop__(
     assigns(i, object_whole(sm))
     invariant(i <= mlen)
+    decreases(mlen - i)
   )
   {
     sm[MLDSA_CRYPTO_BYTES + mlen - 1 - i] = m[mlen - 1 - i];
   }
   ret = mld_sign_signature(sm, smlen, sm + MLDSA_CRYPTO_BYTES, mlen, ctx,
                            ctxlen, sk, context);
-  *smlen += mlen;
+  if (ret == 0)
+  {
+    *smlen += mlen;
+  }
   return ret;
 }
 #endif /* !MLD_CONFIG_NO_RANDOMIZED_API */
+#endif /* !MLD_CONFIG_CORE_API_ONLY */
+#endif /* !MLD_CONFIG_NO_SIGN_API */
 
+#if !defined(MLD_CONFIG_NO_VERIFY_API)
 MLD_MUST_CHECK_RETURN_VALUE
 MLD_EXTERNAL_API
 int mld_sign_verify_internal(const uint8_t *sig, size_t siglen,
@@ -981,39 +1064,24 @@ int mld_sign_verify_internal(const uint8_t *sig, size_t siglen,
                              MLD_CONFIG_CONTEXT_PARAMETER_TYPE context)
 {
   int ret, cmp;
-
-  /* TODO: Remove the following workaround for
-   * https://github.com/diffblue/cbmc/issues/8813 */
-  typedef MLK_UNION_OR_STRUCT
-  {
-    mld_polyveck t1;
-    mld_polyveck w1;
-  }
-  t1w1_u;
-  mld_polyveck *t1;
-  mld_polyveck *w1;
+  unsigned int i;
 
   MLD_ALLOC(buf, uint8_t, (MLDSA_K * MLDSA_POLYW1_PACKEDBYTES), context);
-  MLD_ALLOC(rho, uint8_t, MLDSA_SEEDBYTES, context);
   MLD_ALLOC(mu, uint8_t, MLDSA_CRHBYTES, context);
   MLD_ALLOC(c, uint8_t, MLDSA_CTILDEBYTES, context);
   MLD_ALLOC(c2, uint8_t, MLDSA_CTILDEBYTES, context);
+  MLD_ALLOC(z, mld_polyvecl, 1, context);
   MLD_ALLOC(cp, mld_poly, 1, context);
   MLD_ALLOC(mat, mld_polymat, 1, context);
-  MLD_ALLOC(z, mld_polyvecl, 1, context);
-  MLD_ALLOC(t1w1, t1w1_u, 1, context);
-  MLD_ALLOC(tmp, mld_polyveck, 1, context);
-  MLD_ALLOC(h, mld_polyveck, 1, context);
+  MLD_ALLOC(w1, mld_poly, 1, context);
+  MLD_ALLOC(tmp, mld_poly, 1, context);
 
-  if (buf == NULL || rho == NULL || mu == NULL || c == NULL || c2 == NULL ||
-      cp == NULL || mat == NULL || z == NULL || t1w1 == NULL || tmp == NULL ||
-      h == NULL)
+  if (buf == NULL || mu == NULL || c == NULL || c2 == NULL || z == NULL ||
+      cp == NULL || mat == NULL || w1 == NULL || tmp == NULL)
   {
     ret = MLD_ERR_OUT_OF_MEMORY;
     goto cleanup;
   }
-  t1 = &t1w1->t1;
-  w1 = &t1w1->w1;
 
   if (siglen != MLDSA_CRYPTO_BYTES)
   {
@@ -1021,16 +1089,11 @@ int mld_sign_verify_internal(const uint8_t *sig, size_t siglen,
     goto cleanup;
   }
 
-  mld_unpack_pk(rho, t1, pk);
+  mld_memcpy(c, sig, MLDSA_CTILDEBYTES);
+  mld_polyvecl_unpack_z(z, sig + MLDSA_CTILDEBYTES);
 
-  /* mld_unpack_sig and mld_polyvecl_chknorm signal failure through a
-   * single non-zero error code that's not yet aligned with MLD_ERR_XXX.
-   * Map it to MLD_ERR_FAIL explicitly. */
-  if (mld_unpack_sig(c, z, h, sig))
-  {
-    ret = MLD_ERR_FAIL;
-    goto cleanup;
-  }
+  /* mld_polyvecl_chknorm signals failure through a single non-zero error code
+   * that's not yet aligned with MLD_ERR_XXX. Map it to MLD_ERR_FAIL. */
   if (mld_polyvecl_chknorm(z, MLDSA_GAMMA1 - MLDSA_BETA))
   {
     ret = MLD_ERR_FAIL;
@@ -1054,24 +1117,51 @@ int mld_sign_verify_internal(const uint8_t *sig, size_t siglen,
     mld_memcpy(mu, m, MLDSA_CRHBYTES);
   }
 
-  /* Matrix-vector multiplication; compute Az - c2^dt1 */
+  /* Matrix-vector multiplication and per-row reconstruction of w1. */
+  mld_polyvecl_ntt(z);
+  mld_polyvec_matrix_expand(mat, pk);
   mld_poly_challenge(cp, c);
   mld_poly_ntt(cp);
-  mld_polyveck_shiftl(t1);
-  mld_polyveck_ntt(t1);
-  mld_polyveck_pointwise_poly_montgomery(tmp, cp, t1);
 
-  mld_polyvec_matrix_expand(mat, rho);
-  mld_polyvecl_ntt(z);
-  mld_polyvec_matrix_pointwise_montgomery(w1, mat, z);
-  mld_polyveck_sub(w1, tmp);
-  mld_polyveck_reduce(w1);
-  mld_polyveck_invntt_tomont(w1);
+  for (i = 0; i < MLDSA_K; ++i)
+  __loop__(
+    assigns(MLD_IF_REDUCE_RAM(memory_slice(mat, sizeof(mld_polymat)),)
+            i, ret,
+            memory_slice(w1, sizeof(mld_poly)),
+            memory_slice(tmp, sizeof(mld_poly)),
+            memory_slice(buf, MLDSA_K * MLDSA_POLYW1_PACKEDBYTES)
+    )
+    invariant(i <= MLDSA_K)
+    decreases(MLDSA_K - i)
+  )
+  {
+    /* w1 = (A * z)_i in NTT domain */
+    mld_polyvec_matrix_pointwise_montgomery_row(w1, mat, z, i);
 
-  /* Reconstruct w1 */
-  mld_polyveck_caddq(w1);
-  mld_polyveck_use_hint(tmp, w1, h);
-  mld_polyveck_pack_w1(buf, tmp);
+    /* tmp = c * t1_i * 2^d in NTT domain */
+    mld_unpack_pk_t1(tmp, pk, i);
+    mld_poly_shiftl(tmp);
+    mld_poly_ntt(tmp);
+    mld_poly_pointwise_montgomery(tmp, cp);
+
+    /* w1 = invNTT(w1 - c * t1_i * 2^d) */
+    mld_poly_sub(w1, tmp);
+    mld_poly_reduce(w1);
+    mld_poly_invntt_tomont(w1);
+    mld_poly_caddq(w1);
+
+    /* tmp = h_i (decoded and validated from signature) */
+    ret = mld_sig_unpack_hints(tmp, sig, i);
+    if (ret != 0)
+    {
+      goto cleanup;
+    }
+
+    /* w1 = use_hint(w1, tmp), then pack into buf[i] */
+    mld_poly_use_hint(w1, tmp);
+    mld_polyw1_pack(buf + i * MLDSA_POLYW1_PACKEDBYTES, w1);
+  }
+
   /* Call random oracle and verify challenge */
   mld_H(c2, MLDSA_CTILDEBYTES, mu, MLDSA_CRHBYTES, buf,
         MLDSA_K * MLDSA_POLYW1_PACKEDBYTES, NULL, 0);
@@ -1085,20 +1175,19 @@ int mld_sign_verify_internal(const uint8_t *sig, size_t siglen,
 
 cleanup:
   /* @[FIPS204, Section 3.6.3] Destruction of intermediate values. */
-  MLD_FREE(h, mld_polyveck, 1, context);
-  MLD_FREE(tmp, mld_polyveck, 1, context);
-  MLD_FREE(t1w1, t1w1_u, 1, context);
-  MLD_FREE(z, mld_polyvecl, 1, context);
+  MLD_FREE(tmp, mld_poly, 1, context);
+  MLD_FREE(w1, mld_poly, 1, context);
   MLD_FREE(mat, mld_polymat, 1, context);
   MLD_FREE(cp, mld_poly, 1, context);
+  MLD_FREE(z, mld_polyvecl, 1, context);
   MLD_FREE(c2, uint8_t, MLDSA_CTILDEBYTES, context);
   MLD_FREE(c, uint8_t, MLDSA_CTILDEBYTES, context);
   MLD_FREE(mu, uint8_t, MLDSA_CRHBYTES, context);
-  MLD_FREE(rho, uint8_t, MLDSA_SEEDBYTES, context);
   MLD_FREE(buf, uint8_t, (MLDSA_K * MLDSA_POLYW1_PACKEDBYTES), context);
   return ret;
 }
 
+#if !defined(MLD_CONFIG_CORE_API_ONLY)
 MLD_MUST_CHECK_RETURN_VALUE
 MLD_EXTERNAL_API
 int mld_sign_verify(const uint8_t *sig, size_t siglen, const uint8_t *m,
@@ -1165,6 +1254,7 @@ int mld_sign_open(uint8_t *m, size_t *mlen, const uint8_t *sm, size_t smlen,
     __loop__(
       assigns(i, memory_slice(m, *mlen))
       invariant(i <= *mlen)
+      decreases(*mlen - i)
     )
     {
       m[i] = sm[MLDSA_CRYPTO_BYTES + i];
@@ -1182,8 +1272,11 @@ cleanup:
 
   return ret;
 }
+#endif /* !MLD_CONFIG_CORE_API_ONLY */
+#endif /* !MLD_CONFIG_NO_VERIFY_API */
 
-
+#if !defined(MLD_CONFIG_CORE_API_ONLY)
+#if !defined(MLD_CONFIG_NO_SIGN_API)
 MLD_MUST_CHECK_RETURN_VALUE
 MLD_EXTERNAL_API
 int mld_sign_signature_pre_hash_internal(
@@ -1224,7 +1317,9 @@ cleanup:
   mld_zeroize(pre, sizeof(pre));
   return ret;
 }
+#endif /* !MLD_CONFIG_NO_SIGN_API */
 
+#if !defined(MLD_CONFIG_NO_VERIFY_API)
 MLD_MUST_CHECK_RETURN_VALUE
 MLD_EXTERNAL_API
 int mld_sign_verify_pre_hash_internal(
@@ -1253,7 +1348,9 @@ cleanup:
   mld_zeroize(pre, sizeof(pre));
   return ret;
 }
+#endif /* !MLD_CONFIG_NO_VERIFY_API */
 
+#if !defined(MLD_CONFIG_NO_SIGN_API)
 MLD_MUST_CHECK_RETURN_VALUE
 MLD_EXTERNAL_API
 int mld_sign_signature_pre_hash_shake256(
@@ -1273,7 +1370,9 @@ int mld_sign_signature_pre_hash_shake256(
   mld_zeroize(ph, sizeof(ph));
   return ret;
 }
+#endif /* !MLD_CONFIG_NO_SIGN_API */
 
+#if !defined(MLD_CONFIG_NO_VERIFY_API)
 MLD_MUST_CHECK_RETURN_VALUE
 MLD_EXTERNAL_API
 int mld_sign_verify_pre_hash_shake256(
@@ -1292,8 +1391,9 @@ int mld_sign_verify_pre_hash_shake256(
   mld_zeroize(ph, sizeof(ph));
   return ret;
 }
+#endif /* !MLD_CONFIG_NO_VERIFY_API */
 
-
+#if !defined(MLD_CONFIG_NO_SIGN_API) || !defined(MLD_CONFIG_NO_VERIFY_API)
 #define MLD_PRE_HASH_OID_LEN 11
 
 /*************************************************
@@ -1341,6 +1441,7 @@ static void mld_get_hash_oid(uint8_t oid[MLD_PRE_HASH_OID_LEN], int hashalg)
   for (i = 0; i < sizeof(oid_map) / sizeof(oid_map[0]); i++)
   __loop__(
     invariant(i <= sizeof(oid_map) / sizeof(oid_map[0]))
+    decreases(sizeof(oid_map) / sizeof(oid_map[0]) - i)
   )
   {
     if (oid_map[i].alg == hashalg)
@@ -1418,7 +1519,9 @@ size_t mld_prepare_domain_separation_prefix(
   mld_memcpy(prefix + 2 + ctxlen + MLD_PRE_HASH_OID_LEN, ph, phlen);
   return 2 + ctxlen + MLD_PRE_HASH_OID_LEN + phlen;
 }
+#endif /* !MLD_CONFIG_NO_SIGN_API || !MLD_CONFIG_NO_VERIFY_API */
 
+#if !defined(MLD_CONFIG_NO_KEYPAIR_API)
 MLD_EXTERNAL_API
 int mld_sign_pk_from_sk(uint8_t pk[MLDSA_CRYPTO_PUBLICKEYBYTES],
                         const uint8_t sk[MLDSA_CRYPTO_SECRETKEYBYTES],
@@ -1444,8 +1547,17 @@ int mld_sign_pk_from_sk(uint8_t pk[MLDSA_CRYPTO_PUBLICKEYBYTES],
     goto cleanup;
   }
 
-  /* Unpack secret key */
-  mld_unpack_sk(rho, tr, key, t0, s1, s2, sk);
+  /* Inline unpack_sk: mld_unpack_sk uses lazy types for s1/s2/t0 which
+   * we cannot use here.  */
+  mld_memcpy(rho, sk, MLDSA_SEEDBYTES);
+  mld_memcpy(key, sk + MLDSA_SEEDBYTES, MLDSA_SEEDBYTES);
+  mld_memcpy(tr, sk + 2 * MLDSA_SEEDBYTES, MLDSA_TRBYTES);
+  mld_polyvecl_unpack_eta(s1, sk + 2 * MLDSA_SEEDBYTES + MLDSA_TRBYTES);
+  mld_polyveck_unpack_eta(s2, sk + 2 * MLDSA_SEEDBYTES + MLDSA_TRBYTES +
+                                  MLDSA_L * MLDSA_POLYETA_PACKEDBYTES);
+  mld_polyveck_unpack_t0(t0, sk + 2 * MLDSA_SEEDBYTES + MLDSA_TRBYTES +
+                                 MLDSA_L * MLDSA_POLYETA_PACKEDBYTES +
+                                 MLDSA_K * MLDSA_POLYETA_PACKEDBYTES);
 
   /* Validate s1 and s2 coefficients are within [-MLDSA_ETA, MLDSA_ETA] */
   chk1 = mld_polyvecl_chknorm(s1, MLDSA_ETA + 1) & 0xFF;
@@ -1493,6 +1605,8 @@ cleanup:
 
   return ret;
 }
+#endif /* !MLD_CONFIG_NO_KEYPAIR_API */
+#endif /* !MLD_CONFIG_CORE_API_ONLY */
 
 /* To facilitate single-compilation-unit (SCU) builds, undefine all macros.
  * Don't modify by hand -- this is auto-generated by scripts/autogen. */

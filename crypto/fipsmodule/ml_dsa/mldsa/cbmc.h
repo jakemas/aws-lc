@@ -5,6 +5,7 @@
 
 #ifndef MLD_CBMC_H
 #define MLD_CBMC_H
+
 /***************************************************
  * Basic replacements for __CPROVER_XXX contracts
  ***************************************************/
@@ -16,10 +17,18 @@
 
 #else /* !CBMC */
 
-#include <stdint.h>
 
 #define __contract__(x) x
 #define __loop__(x) x
+
+/* Conditionally expand to __VA_ARGS__ depending on MLD_CONFIG_REDUCE_RAM. */
+#if defined(MLD_CONFIG_REDUCE_RAM)
+#define MLD_IF_REDUCE_RAM(...) __VA_ARGS__
+#define MLD_IF_NOT_REDUCE_RAM(...)
+#else
+#define MLD_IF_REDUCE_RAM(...)
+#define MLD_IF_NOT_REDUCE_RAM(...) __VA_ARGS__
+#endif
 
 /* https://diffblue.github.io/cbmc/contracts-assigns.html */
 #define assigns(...) __CPROVER_assigns(__VA_ARGS__)
@@ -97,7 +106,7 @@
     ((qvar_lb) <= (qvar) && (qvar) < (qvar_ub)) ==> (predicate)   \
   }
 
-#define exists(qvar, qvar_lb, qvar_ub, predicate)         \
+#define exists(qvar, qvar_lb, qvar_ub, predicate)               \
   __CPROVER_exists                                              \
   {                                                             \
     unsigned qvar;                                              \
@@ -121,30 +130,30 @@
   {                                                                    \
     unsigned qvar;                                                     \
     ((qvar_lb) <= (qvar) && (qvar) < (qvar_ub)) ==>                    \
-        (((int)(value_lb) <= ((array_var)[(qvar)])) &&		       \
-         (((array_var)[(qvar)]) < (int)(value_ub)))		       \
+        (((int)(value_lb) <= ((array_var)[(qvar)])) &&                 \
+         (((array_var)[(qvar)]) < (int)(value_ub)))                    \
   }
 
 #define array_bound(array_var, qvar_lb, qvar_ub, value_lb, value_ub) \
-  array_bound_core(CBMC_CONCAT(_cbmc_idx, __COUNTER__), (qvar_lb),      \
+  array_bound_core(CBMC_CONCAT(_cbmc_idx, __COUNTER__), (qvar_lb),   \
       (qvar_ub), (array_var), (value_lb), (value_ub))
 
-#define array_unchanged_core(qvar, qvar_lb, qvar_ub, array_var)        \
-  __CPROVER_forall                                                     \
-  {                                                                    \
-    unsigned qvar;                                                     \
-    ((qvar_lb) <= (qvar) && (qvar) < (qvar_ub)) ==>                    \
+#define array_unchanged_core(qvar, qvar_lb, qvar_ub, array_var)                   \
+  __CPROVER_forall                                                                \
+  {                                                                               \
+    unsigned qvar;                                                                \
+    ((qvar_lb) <= (qvar) && (qvar) < (qvar_ub)) ==>                               \
     ((array_var)[(qvar)]) == (old(* (int32_t (*)[(qvar_ub)])(array_var)))[(qvar)] \
   }
 
 #define array_unchanged(array_var, N) \
     array_unchanged_core(CBMC_CONCAT(_cbmc_idx, __COUNTER__), 0, (N), (array_var))
 
-#define array_unchanged_u64_core(qvar, qvar_lb, qvar_ub, array_var)        \
-  __CPROVER_forall                                                     \
-  {                                                                    \
-    unsigned qvar;                                                     \
-    ((qvar_lb) <= (qvar) && (qvar) < (qvar_ub)) ==>                    \
+#define array_unchanged_u64_core(qvar, qvar_lb, qvar_ub, array_var)                \
+  __CPROVER_forall                                                                 \
+  {                                                                                \
+    unsigned qvar;                                                                 \
+    ((qvar_lb) <= (qvar) && (qvar) < (qvar_ub)) ==>                                \
     ((array_var)[(qvar)]) == (old(* (uint64_t (*)[(qvar_ub)])(array_var)))[(qvar)] \
   }
 
