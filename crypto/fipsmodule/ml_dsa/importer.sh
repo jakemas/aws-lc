@@ -72,15 +72,49 @@ popd
 
 echo "Pull source code from remote repository..."
 
-# Copy mldsa-native source tree -- C source only (no native backends for now)
+# Copy mldsa-native source tree -- C source
 mkdir $SRC
-cp $TMP/mldsa/src/* $SRC
+# Copy only files (not subdirectories like native/ and fips202/)
+find $TMP/mldsa/src -maxdepth 1 -type f -exec cp {} $SRC \;
+
+# Copy x86_64 backend
+# We import only the assembly-backed operations (NTT, INTT, nttunpack,
+# pointwise, polyvecl_pointwise_acc). The AVX2 C-intrinsic operations
+# (rej_uniform, decompose, use_hint, chknorm, caddq, polyz_unpack) are
+# intentionally excluded.
+#
+# The upstream meta.h advertises both assembly and C-intrinsic operations.
+# Rather than modify it, we keep a hand-maintained replacement in
+# ../mldsa_x86_64_meta.h (referenced via MLD_CONFIG_ARITH_BACKEND_FILE) that
+# declares only the assembly-backed subset. Upstream meta.h is not copied.
+mkdir -p $SRC/native/x86_64/src
+# Backend API and specification assumed by mldsa-native frontend
+cp $TMP/mldsa/src/native/api.h $SRC/native
+# Backend header -- unused C-intrinsic declarations are harmless and left intact
+cp $TMP/mldsa/src/native/x86_64/src/arith_native_x86_64.h $SRC/native/x86_64/src
+# Shared constants (zetas table); needed by the assembly kernels
+cp $TMP/mldsa/src/native/x86_64/src/consts.h $SRC/native/x86_64/src
+cp $TMP/mldsa/src/native/x86_64/src/consts.c $SRC/native/x86_64/src
+# Assembly source files for the operations we import (NTT, INTT, nttunpack,
+# pointwise, polyvecl_pointwise_acc). Only files with verified proofs are
+# included.
+cp $TMP/mldsa/src/native/x86_64/src/ntt_avx2_asm.S $SRC/native/x86_64/src
+cp $TMP/mldsa/src/native/x86_64/src/intt_avx2_asm.S $SRC/native/x86_64/src
+cp $TMP/mldsa/src/native/x86_64/src/nttunpack_avx2_asm.S $SRC/native/x86_64/src
+cp $TMP/mldsa/src/native/x86_64/src/pointwise_avx2_asm.S $SRC/native/x86_64/src
+cp $TMP/mldsa/src/native/x86_64/src/pointwise_acc_l4_avx2_asm.S $SRC/native/x86_64/src
+cp $TMP/mldsa/src/native/x86_64/src/pointwise_acc_l5_avx2_asm.S $SRC/native/x86_64/src
+cp $TMP/mldsa/src/native/x86_64/src/pointwise_acc_l7_avx2_asm.S $SRC/native/x86_64/src
 
 # We use the custom `mldsa_native_config.h`, so can remove the default one
-rm $SRC/config.h
+rm -f $SRC/config.h
 
 # Copy formatting file
 cp $TMP/.clang-format $SRC
+
+# ================================================================
+# Process mldsa_native_bcm.c
+# ================================================================
 
 # Copy and statically simplify BCM file
 # The static simplification is not necessary, but improves readability
@@ -88,6 +122,7 @@ cp $TMP/.clang-format $SRC
 # via our own glue layer.
 unifdef -DMLD_CONFIG_FIPS202_CUSTOM_HEADER                             \
         -UMLD_CONFIG_USE_NATIVE_BACKEND_FIPS202                        \
+        -UMLD_SYS_AARCH64                                              \
         $TMP/mldsa/mldsa_native.c                                      \
         > $SRC/mldsa_native_bcm.c
 
@@ -109,6 +144,51 @@ cp $TMP/mldsa/mldsa_native.h $SRC
 # hence the relative import path is just ".".
 echo "Fixup include paths"
 sed "${SED_I[@]}" 's/#include "src\/\([^"]*\)"/#include "\1"/' $SRC/mldsa_native_bcm.c
+
+# Drop #include directives for the C-intrinsic .c files we did not import.
+# Only consts.c (shared with the assembly backend) needs to be compiled.
+echo "Strip C-intrinsic includes from mldsa_native_bcm.c"
+BCM=$SRC/mldsa_native_bcm.c
+sed "${SED_I[@]}" '/^#include "native\/x86_64\/src\/poly_caddq_avx2\.c"/d'      "$BCM"
+sed "${SED_I[@]}" '/^#include "native\/x86_64\/src\/poly_chknorm_avx2\.c"/d'    "$BCM"
+sed "${SED_I[@]}" '/^#include "native\/x86_64\/src\/poly_decompose_32_avx2\.c"/d' "$BCM"
+sed "${SED_I[@]}" '/^#include "native\/x86_64\/src\/poly_decompose_88_avx2\.c"/d' "$BCM"
+sed "${SED_I[@]}" '/^#include "native\/x86_64\/src\/poly_use_hint_32_avx2\.c"/d'  "$BCM"
+sed "${SED_I[@]}" '/^#include "native\/x86_64\/src\/poly_use_hint_88_avx2\.c"/d'  "$BCM"
+sed "${SED_I[@]}" '/^#include "native\/x86_64\/src\/polyz_unpack_17_avx2\.c"/d'   "$BCM"
+sed "${SED_I[@]}" '/^#include "native\/x86_64\/src\/polyz_unpack_19_avx2\.c"/d'   "$BCM"
+sed "${SED_I[@]}" '/^#include "native\/x86_64\/src\/rej_uniform_avx2\.c"/d'       "$BCM"
+sed "${SED_I[@]}" '/^#include "native\/x86_64\/src\/rej_uniform_eta2_avx2\.c"/d'  "$BCM"
+sed "${SED_I[@]}" '/^#include "native\/x86_64\/src\/rej_uniform_eta4_avx2\.c"/d'  "$BCM"
+sed "${SED_I[@]}" '/^#include "native\/x86_64\/src\/rej_uniform_table\.c"/d'      "$BCM"
+
+# ================================================================
+# Fixup x86_64 assembly backend to use s2n-bignum macros
+# ================================================================
+
+echo "Fixup x86_64 assembly backend to use s2n-bignum macros"
+for file in $SRC/native/x86_64/src/*.S; do
+  echo "Processing $file"
+  tmp_file=$(mktemp)
+
+  backend_define="MLD_ARITH_BACKEND_X86_64_DEFAULT"
+
+  # Flatten multiline preprocessor directives, then process with unifdef
+  sed -e ':a' -e 'N' -e '$!ba' -e 's/\\\n/ /g' "$file" | \
+    unifdef -D$backend_define -UMLD_CONFIG_MULTILEVEL_NO_SHARED -DMLD_CONFIG_MULTILEVEL_WITH_SHARED > "$tmp_file"
+  mv "$tmp_file" "$file"
+
+  # Replace common.h include and assembly macros
+  s2n_header="_internal_s2n_bignum_x86_att.h"
+  sed "${SED_I[@]}" "s/#include \"\.\.\/\.\.\/\.\.\/common\.h\"/#include \"$s2n_header\"/" "$file"
+
+  func_name=$(grep -o '\.global MLD_ASM_NAMESPACE(\([^)]*\))' "$file" | sed 's/\.global MLD_ASM_NAMESPACE(\([^)]*\))/\1/')
+  if [ -n "$func_name" ]; then
+    sed "${SED_I[@]}" "s/\.global MLD_ASM_NAMESPACE($func_name)/        S2N_BN_SYM_VISIBILITY_DIRECTIVE(mldsa_$func_name)\n        S2N_BN_SYM_PRIVACY_DIRECTIVE(mldsa_$func_name)/" "$file"
+    sed "${SED_I[@]}" "s/MLD_ASM_FN_SYMBOL($func_name)/S2N_BN_SYMBOL(mldsa_$func_name):/" "$file"
+    sed "${SED_I[@]}" "s/MLD_ASM_FN_SIZE($func_name)/S2N_BN_SIZE_DIRECTIVE(mldsa_$func_name)/" "$file"
+  fi
+done
 
 echo "Remove temporary artifacts ..."
 rm -rf $TMP
